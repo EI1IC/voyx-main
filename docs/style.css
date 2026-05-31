@@ -1,0 +1,295 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: sans-serif;
+    display: flex;
+    height: 100vh;
+}
+
+.sidebar {
+    width: 320px;
+    height: 90%;
+    padding: 15px;
+    background: #f8f9fa;
+    border-right: 1px solid #ddd;
+    border-radius: 10px;
+    box-shadow: 0 7px 20px #0000002e;
+    left: 20px;
+    top: 110px;
+    bottom: 20px;
+    overflow: hidden;
+}
+
+.sidebar h2 {
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+
+.form-group {
+    margin-bottom: 12px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: #555;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+button:hover {
+    background: #2980b9;
+}
+
+button:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.results {
+    margin-top: 15px;
+    padding: 10px;
+    background: white;
+    border-radius: 3px;
+    display: none;
+}
+
+.results.active {
+    display: block;
+}
+
+.result-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.warning {
+    color: #e74c3c;
+    font-size: 13px;
+    margin-top: 8px;
+    display: none;
+}
+
+.warning.show {
+    display: block;
+}
+
+#map {
+    flex: 1;
+}
+
+.loading {
+    text-align: center;
+    padding: 8px;
+    color: #777;
+    display: none;
+    font-size: 13px;
+}
+
+.leaflet-attribution-flag {
+    display: none;
+}
+
+/* Responsive Design */
+@media (max-width: 1760px) {
+    .main-title {
+        font-size: 150px;
+        left: -7px;
+    }
+
+    .main-info {
+        max-width: 640px;
+    }
+}
+
+@media (max-width: 1200px) {
+    .sidebar {
+        width: 260px;
+        min-width: 260px;
+    }
+
+    #map {
+        min-width: calc(100vw - 260px);
+    }
+
+    .main-info {
+        max-width: 540px;
+    }
+
+    .main {
+        padding: 111px 20px 20px;
+    }
+
+    .main-title {
+        font-size: 120px;
+        left: -4px;
+    }
+
+    .main-title-ghost {
+        font-size: 220px;
+    }
+}
+
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 220px;
+        min-width: 220px;
+    }
+
+    #map {
+        min-width: calc(100vw - 220px);
+    }
+
+    .main-title {
+        margin-top: 30px;
+    }
+
+    .main {
+        flex-direction: column-reverse;
+    }
+
+    .main-image {
+        max-width: 350px;
+        position: absolute;
+        left: 370px;
+        top: 370px;
+    }
+
+    .main-info {
+        max-width: 100%;
+    }
+
+    .main-actions {
+        gap: 10px;
+    }
+
+    .main-actions .button {
+        height: 50px;
+        font-size: 14px;
+        width: auto;
+        max-width: 300px;
+    }
+
+    .main-description {
+        max-width: 350px;
+    }
+}
+
+@media (max-width: 570px) {
+    .main-title {
+        font-size: 88px;
+    }
+
+    .main-description {
+        max-width: 100%
+    }
+
+    .main-actions {
+       width: 100%;
+    }
+
+    .main-actions .button {
+        width: 100%;
+        max-width: 100%
+    }
+
+    .main-image {
+        max-width: 650px;
+        position: absolute;
+        left: 170px;
+        top: 70px;
+        opacity: 0.2;
+    }
+}
+
+@media (max-width: 400px) {
+    .main-title {
+        font-size: 70px;
+    }
+}
+
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        min-width: 100%;
+        height: 90%;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+        padding: 10px;
+    }
+
+    .sidebar h2 {
+        font-size: 1rem;
+        margin-bottom: 10px;
+    }
+
+    .form-group label {
+        font-size: 12px;
+    }
+
+    .form-group input {
+        padding: 6px;
+        font-size: 14px;
+    }
+
+    button {
+        padding: 8px;
+        font-size: 13px;
+    }
+
+    #map {
+        height: 50vh;
+        flex: none;
+    }
+}
+
+@media (max-width: 480px) {
+    .sidebar h2 {
+        font-size: 0.9rem;
+    }
+
+    .form-group input {
+        padding: 5px;
+        font-size: 13px;
+    }
+
+    button {
+        padding: 6px;
+        font-size: 12px;
+    }
+
+    .result-row {
+        font-size: 13px;
+    }
+
+    .warning {
+        font-size: 12px;
+    }
+
+    .loading {
+        font-size: 12px;
+    }
+}

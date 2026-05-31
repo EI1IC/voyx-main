@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voyx - Маршрутизация</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="sidebar">
+        <h2>🚚 Построение маршрута</h2>
+        
+        <div class="form-group">
+            <label>📍 Старт</label>
+            <input type="text" id="start" value="Ульяновская, 30">
+        </div>
+        
+        <div id="waypoints-container"></div>
+        
+        <button onclick="addWaypoint()" class="btn-secondary" style="margin: 10px 0; width: 100%;">
+            ➕ Добавить точку
+        </button>
+        
+        <div class="form-group">
+            <label>🏁 Финиш</label>
+            <input type="text" id="end" value="улица Ленина, 111">
+        </div>
+        
+        <button onclick="calculateRoute()" id="btn">Построить маршрут</button>
+        <div class="loading" id="loading">⏳ Расчет...</div>
+        
+        <div class="results" id="results">
+            <div class="result-row">
+                <span>Расстояние:</span>
+                <strong id="dist">-</strong>
+            </div>
+            <div class="result-row">
+                <span>Время:</span>
+                <strong id="time">-</strong>
+            </div>
+            <div class="result-row">
+                <span>Точек:</span>
+                <strong id="points">-</strong>
+            </div>
+            <div id="barrier-warning" class="warning">⚠️ Маршрут проходит через шлагбаумы</div>
+            
+            <div id="segments-container" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>

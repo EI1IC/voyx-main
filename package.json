@@ -1,0 +1,42 @@
+{
+  "name": "voyx",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Маршрутизация Киров: OSM + скриншоты пробок",
+  "type": "module",
+  "scripts": {
+    "start": "npm run backend && npm run frontend:serve",
+    "dev": "concurrently -k -p \"[{name}]\" -n \"BACKEND,FRONTEND\" -c \"bgBlue.bold,bgGreen.bold\" \"npm:backend:dev\" \"npm:frontend:dev\"",
+    
+    "backend": "npm run backend:install && npm run backend:run",
+    "backend:run": "cd backend && .venv/Scripts/python.exe main.py",
+    "backend:dev": "cd backend && .venv/Scripts/python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000",
+    "backend:install": "cd backend && npm run backend:venv && npm run backend:pip && npm run backend:playwright",
+    "backend:venv": "if not exist .venv (python -m venv .venv) else echo venv exists",
+    "backend:pip": ".venv/Scripts/python.exe -m pip install --upgrade pip && .venv/Scripts/pip.exe install -r requirements.txt",
+    "backend:playwright": ".venv/Scripts/playwright.exe install chromium",
+    
+    "frontend": "cd frontend && npm install && npm run build",
+    "frontend:dev": "cd frontend && npm install && npm run dev",
+    "frontend:serve": "cd frontend && npm install && npm run preview",
+    
+    "install:all": "npm run backend:install && npm run frontend",
+    
+    "health": "curl -s http://127.0.0.1:8000/health || echo \"❌ Backend not running\"",
+    "test:route": "curl -X POST http://127.0.0.1:8000/api/route -H \"Content-Type: application/json\" -d \"{\\\"start_address\\\":\\\"Ленина 111, Киров\\\",\\\"end_address\\\":\\\"Ульяновская 30, Киров\\\",\\\"use_traffic\\\":true}\"",
+    
+    "stop": "taskkill /F /IM python.exe /FI \"WINDOWTITLE eq uvicorn*\" 2>nul || true",
+    "clean": "cd backend && del /q *.png *.graphml *.geojson *.json 2>nul || true"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.21.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

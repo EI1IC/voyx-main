@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voyx</title>
+    <link rel="icon" type="image/svg+xml" href="/images/point.svg">
+    <link rel="stylesheet" href="./style.css">
+    <link href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' rel='stylesheet' />
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+</head>
+
+<body>
+    <div class="sidebar">
+        <h2 class="main-title">Построение маршрута</h2>
+        <div class="sidebar-content-scroll">
+            <div class="form-group">
+                <input type="text" id="start" placeholder="Откуда: начните вводить адрес" autocomplete="off" />
+            </div>
+
+            <div id="waypoints-container"></div>
+
+            <button id="add-waypoint-btn" class="btn-secondary">Добавить точку</button>
+
+            <div class="form-group">
+                <input type="text" id="end" placeholder="Куда: начните вводить адрес" autocomplete="off" />
+            </div>
+
+            <button id="calculate-btn">Построить маршрут</button>
+            <div class="loading" id="loading">⏳ Расчет...</div>
+
+            <div class="results" id="results">
+                <div class="result-row">
+                    <span>Расстояние:</span>
+                    <strong id="dist">-</strong>
+                </div>
+                <div class="result-row">
+                    <span>Время:</span>
+                    <strong id="time">-</strong>
+                </div>
+                <div class="result-row">
+                    <span>Точек:</span>
+                    <strong id="points">-</strong>
+                </div>
+                <div id="barrier-warning" class="warning">⚠️ Маршрут проходит через шлагбаумы</div>
+
+                <div id="segments-container" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+    </div>
+    <div id="map"></div>
+
+    <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
+    <script type="module" src="main.js"></script>
+</body>
+
+</html>

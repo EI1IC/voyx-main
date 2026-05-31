@@ -1,0 +1,26 @@
+{
+  "name": "voyx",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Route calculation app for Kirov - Backend + Frontend",
+  "scripts": {
+    "start": "concurrently \"npm run backend\" \"npm run frontend\" --names \"BACKEND,FRONTEND\" --prefix \"[{name}]\" --kill-others-on-fail",
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\" --names \"BACKEND,FRONTEND\" --prefix \"[{name}]\" --kill-others-on-fail",
+    "backend": "cd backend && /workspaces/voyx/backend/.venv/bin/python main.py",
+    "backend:dev": "cd backend && /workspaces/voyx/backend/.venv/bin/python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000",
+    "frontend": "cd frontend && npm run build",
+    "frontend:dev": "cd frontend && npm run dev",
+    "backend:install": "cd backend && /workspaces/voyx/backend/.venv/bin/pip install -r requirements.txt",
+    "backend:only": "npm run backend",
+    "frontend:only": "npm run frontend",
+    "build": "cd backend && mkdir -p docs && echo '# Документация' > docs/index.md",
+    "stop": "pkill -f 'uvicorn main:app' && pkill -f 'vite'",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.21.1"
+  }
+}
