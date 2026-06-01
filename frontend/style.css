@@ -9,10 +9,9 @@ body {
     display: flex;
     height: 100vh;
     width: 100vw;
-    overflow: hidden; /* Чтобы не было двойного скролла */
+    overflow: hidden;
 }
 
-/* Основной контейнер для гибкости */
 .app-wrapper {
     display: flex;
     width: 100%;
@@ -31,16 +30,15 @@ body {
 .sidebar {
     display: flex;
     flex-direction: column;
-    /* Убрали position: fixed, чтобы работала адаптивность */
     position: relative; 
     border-radius: 10px;
     box-shadow: 0 7px 20px #0000002e;
     width: 320px;
-    min-width: 320px; /* Фиксируем ширину на десктопе */
+    min-width: 320px;
     padding: 15px;
     background: #f8f9fa;
     border-right: 1px solid #ddd;
-    margin: 20px 0 20px 20px; /* Отступы как на десктопе */
+    margin: 20px 0 20px 20px;
     max-height: calc(100vh - 40px);
     overflow-y: auto;
     z-index: 1000;
@@ -175,23 +173,43 @@ button:disabled {
     cursor: not-allowed;
 }
 
+/* === РЕЗУЛЬТАТЫ: СЕТКА 2×2 === */
 .results {
     margin-top: 15px;
-    padding: 10px;
-    background: white;
-    border-radius: 3px;
     display: none;
 }
+.results.active { display: block; }
 
-.results.active {
-    display: block;
+.result-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
 }
-
-.result-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    font-size: 14px;
+.result-card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    transition: transform 0.2s;
+}
+.result-card:hover { 
+    transform: translateY(-2px); 
+    box-shadow: 0 4px 8px rgba(0,0,0,0.05); 
+}
+.card-label {
+    display: block;
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.result-card strong {
+    font-size: 15px;
+    color: #062b6c;
+    font-weight: 600;
 }
 
 .warning {
@@ -200,10 +218,7 @@ button:disabled {
     margin-top: 8px;
     display: none;
 }
-
-.warning.show {
-    display: block;
-}
+.warning.show { display: block; }
 
 #map {
     flex-grow: 1;
@@ -228,16 +243,101 @@ button:disabled {
     font-size: 13px;
 }
 
-/* --- АДАПТИВНОСТЬ --- */
+/* === ВЫПАДАЮЩАЯ ПАНЕЛЬ ПАРАМЕТРОВ (невидимая) === */
+.params-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    cursor: pointer;
+    font-size: 13px;
+    color: #000000;
+    margin: 8px 0 4px;
+    user-select: none;
+    font-weight: 500;
+}
+.params-toggle:hover { color: #e74c3c; }
+.params-toggle .arrow { 
+    transition: transform 0.3s; 
+    font-size: 10px; 
+    margin-left: 6px; 
+}
+.params-toggle.open .arrow { transform: rotate(180deg); }
 
+.params-panel {
+    display: none;
+    padding: 0 0 10px 0;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+.params-panel.open { display: block; animation: slideDown 0.2s ease; }
+@keyframes slideDown { 
+    from { opacity:0; transform:translateY(-8px); } 
+    to { opacity:1; transform:translateY(0); } 
+}
+
+.param-label {
+    font-size: 12px;
+    color: #555;
+    font-weight: 500;
+}
+
+/* Заголовок параметра с действием в одной строке */
+.param-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+/* Кликабельные действия "сейчас" / "сброс" */
+.param-action {
+    font-size: 11px;
+    color: #062b6c;
+    cursor: pointer;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+.param-action:hover { color: #2980b9; text-decoration: underline; }
+.param-action-reset { color: #999; }
+.param-action-reset:hover { color: #e74c3c; }
+
+.param-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+/* Поля времени и даты в одну строку */
+.time-date-row {
+    display: flex;
+    gap: 10px;
+}
+.time-date-row .time-input,
+.time-date-row .date-input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+}
+.time-input { min-width: 70px; }
+.date-input { min-width: 110px; }
+
+/* Чекбокс */
+.checkbox-row { margin-top: 4px; }
+.checkbox-row input { width: auto; margin: 0; }
+.checkbox-row label { min-width: auto; cursor: pointer; color: #333; }
+
+/* === АДАПТИВНОСТЬ === */
 @media (max-width: 768px) {
     body {
         flex-direction: column;
         height: 100vh;
         overflow: hidden;
     }
-
-    /* Карта занимает верхние 2/3 экрана */
     #map {
         order: 1;
         height: 67vh; 
@@ -246,13 +346,11 @@ button:disabled {
         min-width: auto;
         flex-shrink: 0;
     }
-
-    /* Сайдбар занимает нижнюю 1/3 экрана */
     .sidebar {
         order: 2;
         width: 100%;
         min-width: auto;
-        height: 33vh; /* Ровно 1/3 высоты экрана */
+        height: 33vh;
         max-height: 33vh;
         margin: 0;
         padding: 10px;
@@ -263,88 +361,53 @@ button:disabled {
         flex-shrink: 0;
         display: flex;
         flex-direction: column;
-        overflow: hidden; /* Скролл будет внутри контента */
+        overflow: hidden;
         background: #f8f9fa;
         z-index: 1000;
     }
-
-    /* Заголовок меньше */
     .sidebar h2 {
         font-size: 1rem;
         margin-bottom: 8px;
         flex-shrink: 0;
     }
-
-    /* Контейнер для прокрутки форм */
     .sidebar-content-scroll {
         flex: 1;
         overflow-y: auto;
         padding-right: 5px;
-        min-height: 0; /* Критично для flex скролла */
+        min-height: 0;
         display: flex;
         flex-direction: column;
     }
-
-    /* Уменьшаем элементы формы */
     .form-group {
         height: 32px;
         padding: 5px 8px;
         margin-bottom: 4px;
         font-size: 12px;
     }
-
-    .waypoint-group {
-        margin-bottom: 8px;
-    }
-
-    .waypoint-group label {
-        font-size: 13px;
-        margin-bottom: 4px;
-    }
-
-    .waypoint-icon {
-        width: 24px;
-        height: 24px;
-        margin-right: 6px;
-    }
-
-    .waypoint-input {
-        font-size: 12px;
-    }
-
-    button {
-        padding: 6px;
-        font-size: 12px;
-        margin-bottom: 4px;
-    }
-
-    .remove-btn {
-        padding: 4px 8px;
-        font-size: 16px;
-    }
-
-    /* Скроллбар */
-    .sidebar-content-scroll::-webkit-scrollbar {
-        width: 4px;
-    }
-    .sidebar-content-scroll::-webkit-scrollbar-thumb {
-        background-color: #ccc;
-        border-radius: 2px;
-    }
+    .waypoint-group { margin-bottom: 8px; }
+    .waypoint-group label { font-size: 13px; margin-bottom: 4px; }
+    .waypoint-icon { width: 24px; height: 24px; margin-right: 6px; }
+    .waypoint-input { font-size: 12px; }
+    button { padding: 6px; font-size: 12px; margin-bottom: 4px; }
+    .remove-btn { padding: 4px 8px; font-size: 16px; }
+    
+    /* Сетка результатов на мобильных */
+    .result-grid { grid-template-columns: 1fr; }
+    
+    /* Параметры на мобильных */
+    .params-toggle { padding: 6px 0; font-size: 12px; }
+    .param-header-row { flex-wrap: wrap; gap: 4px; }
+    .time-date-row { flex-wrap: wrap; }
+    .time-input, .date-input { width: 100%; min-width: auto; }
+    
+    .sidebar-content-scroll::-webkit-scrollbar { width: 4px; }
+    .sidebar-content-scroll::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 2px; }
 }
 
 @media (max-width: 480px) {
-    .sidebar h2 {
-        font-size: 0.9rem;
-    }
-    
-    .result-row {
-        font-size: 12px;
-        flex-direction: column;
-        gap: 2px;
-    }
-
-    .warning {
-        font-size: 11px;
-    }
+    .sidebar h2 { font-size: 0.9rem; }
+    .result-card strong { font-size: 14px; }
+    .card-label { font-size: 10px; }
+    .warning { font-size: 11px; }
+    .param-action { font-size: 10px; }
 }

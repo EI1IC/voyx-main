@@ -25,7 +25,7 @@ def init_graph() -> None:
             bbox=BBOX,
             custom_filter=CUSTOM_FILTER,
             network_type="drive",
-            simplify=False,
+            simplify=True,
             retain_all=False,
             truncate_by_edge=True
         )

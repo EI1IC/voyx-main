@@ -1,58 +1,101 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voyx</title>
-    <link rel="icon" type="image/svg+xml" href="/voyx/images/point.svg">
+    <link rel="icon" type="image/svg+xml" href="/voyx/images/point.svg">
     <link href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' rel='stylesheet' />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-  <script type="module" crossorigin src="/voyx/assets/index-Cmhf16uU.js"></script>
-  <link rel="stylesheet" crossorigin href="/voyx/assets/index-C5cDZKCj.css">
+  <script type="module" crossorigin src="/voyx/assets/index-a1hCX-h7.js"></script>
+  <link rel="stylesheet" crossorigin href="/voyx/assets/index-Bw_Ik35N.css">
 </head>
-
 <body>
     <div class="sidebar">
         <h2 class="main-title">Построение маршрута</h2>
         <div class="sidebar-content-scroll">
+            <!-- Стартовая точка -->
             <div class="form-group">
                 <input type="text" id="start" placeholder="Откуда: начните вводить адрес" autocomplete="off" />
             </div>
 
+            <!-- Промежуточные точки -->
             <div id="waypoints-container"></div>
-
             <button id="add-waypoint-btn" class="btn-secondary">Добавить точку</button>
 
+            <!-- Конечная точка -->
             <div class="form-group">
                 <input type="text" id="end" placeholder="Куда: начните вводить адрес" autocomplete="off" />
             </div>
 
+            <!-- 🔽 Выпадающая панель параметров -->
+            <div class="params-toggle" id="params-toggle">
+                <span>Параметры</span>
+                <span class="arrow">▼</span>
+            </div>
+            
+            <div class="params-panel" id="params-panel">
+                <!-- Отправление -->
+                <div class="param-row param-header-row">
+                    <span class="param-label">Время и дата отправления</span>
+                    <span class="param-action" id="set-now">сейчас</span>
+                </div>
+                <div class="param-row time-date-row">
+                    <input type="time" id="departure-time" class="time-input">
+                    <input type="date" id="departure-date" class="date-input">
+                </div>
+                
+                <!-- Прибытие -->
+                <div class="param-row param-header-row" style="margin-top: 12px;">
+                    <span class="param-label">Время и дата прибытия</span>
+                    <span class="param-action param-action-reset" id="reset-arrival">сброс</span>
+                </div>
+                <div class="param-row time-date-row">
+                    <input type="time" id="arrival-time" class="time-input">
+                    <input type="date" id="arrival-date" class="date-input">
+                </div>
+                
+                <!-- Пробки -->
+                <div class="param-row checkbox-row" style="margin-top: 12px;">
+                    <input type="checkbox" id="use-traffic" checked>
+                    <label for="use-traffic">Учитывать пробки</label>
+                </div>
+            </div>
+
+            <!-- Кнопка расчета -->
             <button id="calculate-btn">Построить маршрут</button>
             <div class="loading" id="loading">⏳ Расчет...</div>
 
+            <!-- Результаты -->
             <div class="results" id="results">
-                <div class="result-row">
-                    <span>Расстояние:</span>
-                    <strong id="dist">-</strong>
-                </div>
-                <div class="result-row">
-                    <span>Время:</span>
-                    <strong id="time">-</strong>
-                </div>
-                <div class="result-row">
-                    <span>Точек:</span>
-                    <strong id="points">-</strong>
+                <div class="result-grid">
+                    <div class="result-card">
+                        <span class="card-label">📏 Расстояние</span>
+                        <strong id="dist">-</strong>
+                    </div>
+                    <div class="result-card">
+                        <span class="card-label">⏱️ Время в пути</span>
+                        <strong id="time">-</strong>
+                    </div>
+                    <div class="result-card" id="dep-card" style="display:none;">
+                        <span class="card-label">🕒 Отправление</span>
+                        <strong id="dep-display">-</strong>
+                    </div>
+                    <div class="result-card" id="arr-card" style="display:none;">
+                        <span class="card-label">🏁 Прибытие</span>
+                        <strong id="arr-display">-</strong>
+                    </div>
                 </div>
                 <div id="barrier-warning" class="warning">⚠️ Маршрут проходит через шлагбаумы</div>
-
+                <div id="time-mismatch-warning" class="warning">⚠️ Расчётное время не совпадает с указанным</div>
                 <div id="segments-container" style="margin-top: 15px;"></div>
             </div>
         </div>
     </div>
+    
+    <!-- Карта -->
     <div id="map"></div>
 
-    <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
+    <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
 </body>
-
 </html>

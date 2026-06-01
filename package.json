@@ -4,29 +4,26 @@
   "private": true,
   "description": "Маршрутизация Киров: OSM + скриншоты пробок",
   "type": "module",
-  "scripts": {
-    "start": "npm run backend && npm run frontend:serve",
+    "scripts": {
+    "start": "concurrently -k -p \"[{name}]\" -n \"BACKEND,FRONTEND\" \"npm:backend:run\" \"npm:frontend:serve\"",
     "dev": "concurrently -k -p \"[{name}]\" -n \"BACKEND,FRONTEND\" -c \"bgBlue.bold,bgGreen.bold\" \"npm:backend:dev\" \"npm:frontend:dev\"",
     
-    "backend": "npm run backend:install && npm run backend:run",
-    "backend:run": "cd backend && .venv/Scripts/python.exe main.py",
-    "backend:dev": "cd backend && .venv/Scripts/python.exe -m uvicorn main:app --reload --host 127.0.0.1 --port 8000",
-    "backend:install": "cd backend && npm run backend:venv && npm run backend:pip && npm run backend:playwright",
-    "backend:venv": "if not exist .venv (python -m venv .venv) else echo venv exists",
-    "backend:pip": ".venv/Scripts/python.exe -m pip install --upgrade pip && .venv/Scripts/pip.exe install -r requirements.txt",
-    "backend:playwright": ".venv/Scripts/playwright.exe install chromium",
+    "backend:run": "cd backend && .venv/bin/python main.py",
+    "backend:dev": "cd backend && .venv/bin/python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+    
+    "backend:venv": "cd backend && [ -d .venv ] || python3 -m venv .venv",
+    "backend:pip": "cd backend && .venv/bin/pip install --upgrade pip && .venv/bin/pip install -r requirements.txt",
+    "backend:playwright": "cd backend && .venv/bin/playwright install --with-deps chromium",
+    "backend:install": "npm run backend:venv && npm run backend:pip && npm run backend:playwright",
     
     "frontend": "cd frontend && npm install && npm run build",
     "frontend:dev": "cd frontend && npm install && npm run dev",
-    "frontend:serve": "cd frontend && npm install && npm run preview",
+    "frontend:serve": "cd frontend && npm run preview",
     
     "install:all": "npm run backend:install && npm run frontend",
     
-    "health": "curl -s http://127.0.0.1:8000/health || echo \"❌ Backend not running\"",
-    "test:route": "curl -X POST http://127.0.0.1:8000/api/route -H \"Content-Type: application/json\" -d \"{\\\"start_address\\\":\\\"Ленина 111, Киров\\\",\\\"end_address\\\":\\\"Ульяновская 30, Киров\\\",\\\"use_traffic\\\":true}\"",
-    
-    "stop": "taskkill /F /IM python.exe /FI \"WINDOWTITLE eq uvicorn*\" 2>nul || true",
-    "clean": "cd backend && del /q *.png *.graphml *.geojson *.json 2>nul || true"
+    "stop": "pkill -f 'uvicorn' && pkill -f 'vite' || true",
+    "clean": "rm -f backend/*.png backend/*.graphml backend/*.geojson backend/*.json || true"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
