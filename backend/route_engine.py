@@ -9,7 +9,7 @@ from shapely.geometry import LineString, Point
 from functools import lru_cache
 from typing import List
 
-from app.traffic_screen import get_edge_factor
+from app.traffic_screen import get_edge_factor, _edge_factor_cache
 
 # ==============================================================================
 # КОНФИГУРАЦИЯ
@@ -22,31 +22,20 @@ GRAPH_FILENAME = "kirov_road_network.graphml"
 BARRIERS_FILENAME = "kirov_barriers.geojson"
 BARRIER_TOLERANCE = 7
 
-# ✅ Реалистичные средние скорости (откалиброваны под городские условия)
-SPEED_LIMITS = {
-    'motorway': 75, 'trunk': 60, 'primary': 42,
-    'secondary': 34, 'tertiary': 27, 'residential': 16,
-    'service': 13, 'living_street': 11, 'unclassified': 27, 'road': 32
-}
-
-# ✅ Штрафы для маршрутизации (дворы избегаются, но не блокируются)
-ROAD_PENALTIES = {
-    'motorway': 1.0, 'trunk': 1.0, 'primary': 1.1,
-    'secondary': 1.2, 'tertiary': 1.3,
-    'residential': 4.0, 'living_street': 6.0, 'service': 8.0,
-    'unclassified': 1.5, 'road': 1.5
-}
+from app.config import *
 
 _G = None
 _BLOCKED_EDGES = None
 _BLOCKED_EDGES_SET = None
+
+# Кэш коэффициентов для рёбер в рамках одного запроса
+_edge_k_cache = {}
 
 # ==============================================================================
 # ГЕОКОДИРОВАНИЕ
 # ==============================================================================
 @lru_cache(maxsize=1000)
 def geocode_address(address_query, city="Kirov, Russia"):
-    """Преобразует адрес в координаты (lat, lon)"""
     if "Киров" in address_query or "Kirov" in address_query:
         full_query = address_query
     else:
@@ -61,7 +50,6 @@ def geocode_address(address_query, city="Kirov, Russia"):
 # УПРАВЛЕНИЕ ГРАФОМ
 # ==============================================================================
 def init_graph():
-    """Инициализация графа ПРИ СТАРТЕ приложения"""
     global _G, _BLOCKED_EDGES, _BLOCKED_EDGES_SET
     from app.config import BBOX, CUSTOM_FILTER
     bbox = BBOX
@@ -95,8 +83,7 @@ def init_graph():
     print("✅ Система готова к работе")
 
 def get_graph():
-    if _G is None:
-        init_graph()
+    if _G is None: init_graph()
     return _G, _BLOCKED_EDGES_SET
 
 # ==============================================================================
@@ -129,13 +116,11 @@ def map_barriers_to_graph(G, barriers_gdf, tolerance=BARRIER_TOLERANCE):
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ==============================================================================
 def _is_near_point(lat, lon, point_lat, point_lon, radius_m=150):
-    """Проверяет, находится ли точка в радиусе от целевой"""
     lat_diff = abs(lat - point_lat) * 111000
     lon_diff = abs(lon - point_lon) * 111000 * math.cos(math.radians(point_lat))
     return math.sqrt(lat_diff**2 + lon_diff**2) <= radius_m
 
 def _process_time_logic(departure_time_str, arrival_time_str, calc_time_minutes):
-    """Унифицированная логика расчёта времени отправления/прибытия"""
     dep_dt = arr_dt = None
     time_mismatch = False
 
@@ -148,7 +133,7 @@ def _process_time_logic(departure_time_str, arrival_time_str, calc_time_minutes)
 
     if dep_dt and arr_dt:
         expected_arr = dep_dt + datetime.timedelta(minutes=calc_time_minutes)
-        if abs((arr_dt - expected_arr).total_seconds()) > 120:  # >2 мин расхождение
+        if abs((arr_dt - expected_arr).total_seconds()) > 120:
             time_mismatch = True
     elif dep_dt:
         arr_dt = dep_dt + datetime.timedelta(minutes=calc_time_minutes)
@@ -163,8 +148,23 @@ def _process_time_logic(departure_time_str, arrival_time_str, calc_time_minutes)
         "arrival_iso": arr_dt.isoformat() if arr_dt else None
     }
 
+def _get_edge_k_cached(u, v, G, use_traffic):
+    """Получает коэффициент пробок для ребра из кэша"""
+    if not use_traffic:
+        return 1.0
+    
+    cache_key = (u, v)
+    
+    # Проверяем кэш рёбер (предварительно вычисленный)
+    if cache_key in _edge_factor_cache:
+        return _edge_factor_cache[cache_key]
+    
+    # Если кэша нет (fallback) — вычисляем
+    traffic_k, _ = get_edge_factor(G.nodes[u]['x'], G.nodes[u]['y'], G.nodes[v]['x'], G.nodes[v]['y'])
+    _edge_factor_cache[cache_key] = traffic_k
+    return traffic_k
+
 def _calc_segment_metrics(G, path, use_traffic):
-    """Считает дистанцию и время для пути"""
     distance_meters = 0
     estimated_time_minutes = 0
     
@@ -177,18 +177,14 @@ def _calc_segment_metrics(G, path, use_traffic):
         if isinstance(highway_type, list): highway_type = highway_type[0]
         base_speed = SPEED_LIMITS.get(highway_type, 30)
         
-        traffic_k = 1.0
-        if use_traffic:
-            traffic_k, _ = get_edge_factor(G.nodes[u]['x'], G.nodes[u]['y'], G.nodes[v]['x'], G.nodes[v]['y'])
-            
+        traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
         effective_speed = base_speed / traffic_k
         estimated_time_minutes += (length / (effective_speed / 3.6)) / 60
         
-        # Задержка на узлы (светофоры/повороты)
         if 0 < i < len(path) - 2:
-            estimated_time_minutes += 0.042  # 2.5 секунды
+            estimated_time_minutes += 0.08
             
-    return distance_meters, estimated_time_minutes * 1.05  # +5% на непредсказуемое
+    return distance_meters, estimated_time_minutes * 1.1
 
 # ==============================================================================
 # РАСЧЁТ МАРШРУТА (ОДНА ТОЧКА -> ДРУГАЯ)
@@ -201,6 +197,7 @@ def calculate_route(start_addr, end_addr, use_traffic=True, departure_time=None,
     orig_node = ox.nearest_nodes(G, X=start_coords[1], Y=start_coords[0])
     dest_node = ox.nearest_nodes(G, X=end_coords[1], Y=end_coords[0])
     
+    # ОДНОЭТАПНЫЙ АЛГОРИТМ С ПРОБКАМИ
     def weight(u, v, data):
         min_cost = float('inf')
         valid_found = False
@@ -212,7 +209,6 @@ def calculate_route(start_addr, end_addr, use_traffic=True, departure_time=None,
             if isinstance(highway, list): highway = highway[0]
             penalty = ROAD_PENALTIES.get(highway, 2.0)
             
-            # Умный штраф дворов
             if highway in ['residential', 'living_street', 'service']:
                 mid_lat = (G.nodes[u]['y'] + G.nodes[v]['y']) / 2
                 mid_lon = (G.nodes[u]['x'] + G.nodes[v]['x']) / 2
@@ -221,9 +217,9 @@ def calculate_route(start_addr, end_addr, use_traffic=True, departure_time=None,
                     penalty *= 3.0
             
             if use_traffic:
-                k, _ = get_edge_factor(G.nodes[u]['x'], G.nodes[u]['y'], G.nodes[v]['x'], G.nodes[v]['y'])
-                penalty *= min(k, 2.0)
-                
+                traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
+                penalty *= min(traffic_k, 2.0)
+            
             cost = length * penalty
             if cost < min_cost: min_cost = cost; valid_found = True
         return min_cost if valid_found else float('inf')
@@ -286,8 +282,8 @@ def calculate_route_by_coords(start_coords, end_coords, use_traffic=True, depart
                     not _is_near_point(mid_lat, mid_lon, end_coords[0], end_coords[1])):
                     penalty *= 3.0
             if use_traffic:
-                k, _ = get_edge_factor(G.nodes[u]['x'], G.nodes[u]['y'], G.nodes[v]['x'], G.nodes[v]['y'])
-                penalty *= min(k, 2.0)
+                traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
+                penalty *= min(traffic_k, 2.0)
             cost = length * penalty
             if cost < min_cost: min_cost = cost; valid_found = True
         return min_cost if valid_found else float('inf')
@@ -311,22 +307,15 @@ def calculate_route_by_coords(start_coords, end_coords, use_traffic=True, depart
     }
 
 # ==============================================================================
-# МНОГОТОЧЕЧНЫЙ МАРШРУТ (БЕЗ ПЕТЕЛЬ НА СТЫКАХ)
+# МНОГОТОЧЕЧНЫЙ МАРШРУТ
 # ==============================================================================
 def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = True, departure_time: str = None, arrival_time: str = None):
-    """
-    Строит маршрут через N точек без петель на стыках.
-    Геокодирует все точки один раз и ищет узлы один раз.
-    """
     if len(waypoints_addrs) < 2:
         raise ValueError("Нужно минимум 2 точки")
         
     G, blocked_edges_set = get_graph()
     
-    # 1. Геокодируем ВСЕ точки ОДИН РАЗ
     coords = [geocode_address(addr) for addr in waypoints_addrs]
-    
-    # 2. Находим ближайшие узлы графа ОДИН РАЗ
     nodes = [ox.nearest_nodes(G, X=lon, Y=lat) for lat, lon in coords]
     
     full_path = []
@@ -334,7 +323,6 @@ def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = 
     total_distance = 0
     total_time = 0
     
-    # 3. Строим путь по сегментам
     for i in range(len(nodes) - 1):
         u, v = nodes[i], nodes[i+1]
         
@@ -358,9 +346,9 @@ def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = 
                         penalty *= 3.0
                 
                 if use_traffic:
-                    k, _ = get_edge_factor(G.nodes[x]['x'], G.nodes[x]['y'], G.nodes[y]['x'], G.nodes[y]['y'])
-                    penalty *= min(k, 2.0)
-                    
+                    traffic_k = _get_edge_k_cached(x, y, G, use_traffic)
+                    penalty *= min(traffic_k, 2.0)
+                
                 cost = length * penalty
                 if cost < min_cost: min_cost = cost; valid = True
             return min_cost if valid else float('inf')
@@ -371,13 +359,9 @@ def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = 
             def fallback(x, y, data): return data.get('length', 0) * 50
             seg_path = nx.shortest_path(G, source=u, target=v, weight=fallback)
 
-        # Собираем путь (убираем дубликат узла на стыке)
-        if i == 0:
-            full_path.extend(seg_path)
-        else:
-            full_path.extend(seg_path[1:])
+        if i == 0: full_path.extend(seg_path)
+        else: full_path.extend(seg_path[1:])
             
-        # Считаем метрики сегмента
         seg_dist, seg_time = 0, 0
         for a, b in zip(seg_path[:-1], seg_path[1:]):
             route_coords.append([G.nodes[a]['x'], G.nodes[a]['y']])
@@ -388,25 +372,18 @@ def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = 
             highway_type = edge_data.get('highway', 'residential')
             if isinstance(highway_type, list): highway_type = highway_type[0]
             base_speed = SPEED_LIMITS.get(highway_type, 30)
-            traffic_k = 1.0
-            if use_traffic:
-                traffic_k, _ = get_edge_factor(G.nodes[a]['x'], G.nodes[a]['y'], G.nodes[b]['x'], G.nodes[b]['y'])
+            traffic_k = _get_edge_k_cached(a, b, G, use_traffic)
             
             seg_time += (length / (base_speed / traffic_k / 3.6)) / 60
-            if len(seg_path) > 2:
-                seg_time += 0.042  # 2.5 сек на узл
+            if len(seg_path) > 2: seg_time += 0.08
 
         route_coords.append([G.nodes[seg_path[-1]]['x'], G.nodes[seg_path[-1]]['y']])
         total_distance += seg_dist
         total_time += seg_time
         
-    # Финальная калибровка
-    total_time *= 1.05
+    total_time *= 1.1
     
-    # Логика времени
     time_data = _process_time_logic(departure_time, arrival_time, total_time)
-    
-    # Формируем waypoints для фронтенда
     wps = [{"lat": lat, "lon": lon, "address": addr} for (lat, lon), addr in zip(coords, waypoints_addrs)]
 
     return {

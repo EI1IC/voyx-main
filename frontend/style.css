@@ -74,7 +74,7 @@ body {
     color: #555;
 }
 
-input, textarea {
+input, textarea, select {
     width: 100%;
     border: 0;
     outline: none;
@@ -243,7 +243,7 @@ button:disabled {
     font-size: 13px;
 }
 
-/* === ВЫПАДАЮЩАЯ ПАНЕЛЬ ПАРАМЕТРОВ (невидимая) === */
+/* === ВЫПАДАЮЩАЯ ПАНЕЛЬ ПАРАМЕТРОВ === */
 .params-toggle {
     display: flex;
     justify-content: space-between;
@@ -282,7 +282,6 @@ button:disabled {
     font-weight: 500;
 }
 
-/* Заголовок параметра с действием в одной строке */
 .param-header-row {
     display: flex;
     justify-content: space-between;
@@ -290,7 +289,6 @@ button:disabled {
     margin-bottom: 6px;
 }
 
-/* Кликабельные действия "сейчас" / "сброс" */
 .param-action {
     font-size: 11px;
     color: #062b6c;
@@ -309,22 +307,72 @@ button:disabled {
     margin-bottom: 6px;
 }
 
-/* Поля времени и даты в одну строку */
-.time-date-row {
+/* === ВЫПАДАЮЩИЕ СПИСКИ ВРЕМЕНИ === */
+.time-select-row {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 6px;
 }
-.time-date-row .time-input,
-.time-date-row .date-input {
-    flex: 1;
-    padding: 6px 8px;
+
+.time-select {
+    padding: 8px 6px;
     border: 1px solid #ddd;
     border-radius: 6px;
-    font-size: 12px;
+    font-size: 13px;
     background: #fff;
+    color: #111;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    font-family: inherit;
+    appearance: auto;
 }
-.time-input { min-width: 70px; }
-.date-input { min-width: 110px; }
+.time-select:hover {
+    border-color: #062b6c;
+}
+.time-select:focus {
+    outline: none;
+    border-color: #062b6c;
+    box-shadow: 0 0 0 2px rgba(6, 43, 108, 0.1);
+}
+
+.hour-select {
+    width: 60px;
+    text-align: center;
+}
+
+.minute-select {
+    width: 60px;
+    text-align: center;
+}
+
+.time-separator {
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    margin: 0 2px;
+}
+
+.date-input {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    color: #111;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    font-family: inherit;
+    min-width: 110px;
+}
+.date-input:hover {
+    border-color: #062b6c;
+}
+.date-input:focus {
+    outline: none;
+    border-color: #062b6c;
+    box-shadow: 0 0 0 2px rgba(6, 43, 108, 0.1);
+}
 
 /* Чекбокс */
 .checkbox-row { margin-top: 4px; }
@@ -391,14 +439,17 @@ button:disabled {
     button { padding: 6px; font-size: 12px; margin-bottom: 4px; }
     .remove-btn { padding: 4px 8px; font-size: 16px; }
     
-    /* Сетка результатов на мобильных */
     .result-grid { grid-template-columns: 1fr; }
     
-    /* Параметры на мобильных */
     .params-toggle { padding: 6px 0; font-size: 12px; }
     .param-header-row { flex-wrap: wrap; gap: 4px; }
-    .time-date-row { flex-wrap: wrap; }
-    .time-input, .date-input { width: 100%; min-width: auto; }
+    
+    .time-select-row {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+    .hour-select, .minute-select { width: 55px; font-size: 12px; padding: 6px 4px; }
+    .date-input { width: 100%; min-width: auto; font-size: 12px; padding: 6px 8px; }
     
     .sidebar-content-scroll::-webkit-scrollbar { width: 4px; }
     .sidebar-content-scroll::-webkit-scrollbar-thumb { background-color: #ccc; border-radius: 2px; }

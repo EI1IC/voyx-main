@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,6 +10,7 @@
     <link href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css' rel='stylesheet' />
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
 </head>
+
 <body>
     <div class="sidebar">
         <h2 class="main-title">Построение маршрута</h2>
@@ -32,28 +34,32 @@
                 <span>Параметры</span>
                 <span class="arrow">▼</span>
             </div>
-            
+
             <div class="params-panel" id="params-panel">
                 <!-- Отправление -->
                 <div class="param-row param-header-row">
                     <span class="param-label">Время и дата отправления</span>
                     <span class="param-action" id="set-now">сейчас</span>
                 </div>
-                <div class="param-row time-date-row">
-                    <input type="time" id="departure-time" class="time-input">
+                <div class="param-row time-select-row">
+                    <select id="departure-hour" class="time-select hour-select"></select>
+                    <span class="time-separator">:</span>
+                    <select id="departure-minute" class="time-select minute-select"></select>
                     <input type="date" id="departure-date" class="date-input">
                 </div>
-                
+
                 <!-- Прибытие -->
                 <div class="param-row param-header-row" style="margin-top: 12px;">
                     <span class="param-label">Время и дата прибытия</span>
                     <span class="param-action param-action-reset" id="reset-arrival">сброс</span>
                 </div>
-                <div class="param-row time-date-row">
-                    <input type="time" id="arrival-time" class="time-input">
+                <div class="param-row time-select-row">
+                    <select id="arrival-hour" class="time-select hour-select"></select>
+                    <span class="time-separator">:</span>
+                    <select id="arrival-minute" class="time-select minute-select"></select>
                     <input type="date" id="arrival-date" class="date-input">
                 </div>
-                
+
                 <!-- Пробки -->
                 <div class="param-row checkbox-row" style="margin-top: 12px;">
                     <input type="checkbox" id="use-traffic" checked>
@@ -91,11 +97,12 @@
             </div>
         </div>
     </div>
-    
+
     <!-- Карта -->
     <div id="map"></div>
 
     <script src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js'></script>
     <script type="module" src="main.js"></script>
 </body>
+
 </html>

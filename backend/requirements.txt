@@ -13,3 +13,4 @@ playwright>=1.40.0
 Pillow>=10.0.0 
 shapely>=2.0.0
 playwright-stealth
+pytz>=2024.1
