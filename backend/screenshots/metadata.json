@@ -6937,5 +6937,32 @@
     "period": "night",
     "year": 2026,
     "file_size_mb": 3.94
+  },
+  "tuesday_08_30_summer.png": {
+    "created": "2026-06-08T16:48:57.830859",
+    "url": "https://yandex.ru/maps/46/kirov/probki/?l=sat%2Ctrf&ll=49.6271%2C58.6021&trfm=arc&trfst=date%3A1780983000000~time%3A8%2C30&z=14",
+    "season": "summer",
+    "weekday": "tuesday",
+    "period": "morning",
+    "year": 2026,
+    "file_size_mb": 3.96
+  },
+  "tuesday_17_30_summer.png": {
+    "created": "2026-06-08T21:03:15.176402",
+    "url": "https://yandex.ru/maps/46/kirov/probki/?l=sat%2Ctrf&ll=49.6271%2C58.6021&trfm=arc&trfst=date%3A1781015400000~time%3A17%2C30&z=14",
+    "season": "summer",
+    "weekday": "tuesday",
+    "period": "evening",
+    "year": 2026,
+    "file_size_mb": 3.96
+  },
+  "wednesday_07_15_summer.png": {
+    "created": "2026-06-16T18:05:53.933666",
+    "url": "https://yandex.ru/maps/46/kirov/probki/?l=sat%2Ctrf&ll=49.6271%2C58.6021&trfm=arc&trfst=date%3A1781669700000~time%3A7%2C15&z=14",
+    "season": "summer",
+    "weekday": "wednesday",
+    "period": "day",
+    "year": 2026,
+    "file_size_mb": 3.96
   }
 }

@@ -2,6 +2,7 @@
 import os
 import math
 import datetime
+import pickle
 import osmnx as ox
 import networkx as nx
 import geopandas as gpd
@@ -30,6 +31,9 @@ _BLOCKED_EDGES_SET = None
 
 # Кэш коэффициентов для рёбер в рамках одного запроса
 _edge_k_cache = {}
+
+# Кэш для интерполированных значений
+_interpolated_k_cache = {}
 
 # ==============================================================================
 # ГЕОКОДИРОВАНИЕ
@@ -64,7 +68,7 @@ def init_graph():
     else:
         print("📂 Загрузка графа из файла...")
         _G = ox.load_graphml(filepath=GRAPH_FILENAME)
-        print(f"✅ Граф загружён: {len(_G.nodes)} узлов, {len(_G.edges)} рёбер")
+        print(f"✅ Граф загружен: {len(_G.nodes)} узлов, {len(_G.edges)} рёбер")
 
     if not os.path.exists(BARRIERS_FILENAME):
         print("🚧 Загрузка барьеров...")
@@ -164,7 +168,133 @@ def _get_edge_k_cached(u, v, G, use_traffic):
     _edge_factor_cache[cache_key] = traffic_k
     return traffic_k
 
-def _calc_segment_metrics(G, path, use_traffic):
+# ==============================================================================
+# 🆕 ЛИНЕЙНАЯ ИНТЕРПОЛЯЦИЯ КОЭФФИЦИЕНТОВ ПРОБОК
+# ==============================================================================
+def get_edge_k_for_time(u, v, G, use_traffic, start_time: datetime.datetime = None):
+    """
+    Получает коэффициент пробок для ребра с учетом временной интерполяции.
+    Если start_time указан, интерполирует между двумя ближайшими временными срезами.
+    """
+    if not use_traffic:
+        return 1.0
+    
+    cache_key = (u, v, start_time.isoformat() if start_time else None)
+    
+    # Проверяем кэш интерполированных значений
+    if cache_key in _interpolated_k_cache:
+        return _interpolated_k_cache[cache_key]
+    
+    # Если время не указано или это "сейчас" - используем текущий кэш
+    if start_time is None:
+        traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
+        _interpolated_k_cache[cache_key] = traffic_k
+        return traffic_k
+    
+    # Находим два ближайших временных среза
+    k1, k2, t1, t2, alpha = _find_bracketing_caches(u, v, start_time)
+    
+    if k1 is None or k2 is None:
+        # Fallback: если не нашли оба кэша, используем ближайший
+        traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
+        _interpolated_k_cache[cache_key] = traffic_k
+        return traffic_k
+    
+    # Линейная интерполяция: k(t) = k1 + (k2 - k1) * alpha
+    if alpha == 0:
+        traffic_k = k1
+    elif alpha == 1:
+        traffic_k = k2
+    else:
+        traffic_k = k1 + (k2 - k1) * alpha
+    
+    _interpolated_k_cache[cache_key] = traffic_k
+    return traffic_k
+
+def _find_bracketing_caches(u, v, start_time: datetime.datetime):
+    """
+    Находит два ближайших временных среза (до и после start_time)
+    и возвращает их коэффициенты для ребра (u, v).
+    
+    Использует ЧАСОВУЮ интерполяцию: если время 7:32, берутся кэши за 7:00 и 8:00.
+    
+    Returns:
+        (k1, k2, t1, t2, alpha) где:
+        - k1, k2 - коэффициенты для t1 и t2
+        - t1, t2 - временные метки (datetime)
+        - alpha - вес для интерполяции (0 = только k1, 1 = только k2)
+    """
+    from app.traffic_screen import SCREENSHOTS_DIR, get_screenshot_for_datetime
+    
+    # ✅ Округляем время вниз до целого часа (например, 7:32 → 7:00)
+    t1 = _floor_to_hour(start_time)
+    # ✅ Следующий час (например, 7:00 → 8:00)
+    t2 = t1 + datetime.timedelta(hours=1)
+    
+    # Загружаем кэши для обоих временных точек
+    k1 = _load_edge_k_from_cache(u, v, t1)
+    k2 = _load_edge_k_from_cache(u, v, t2)
+    
+    # Если один из кэшей отсутствует, используем fallback
+    if k1 is None or k2 is None:
+        return None, None, None, None, 0
+    
+    # ✅ Вычисляем alpha (вес для интерполяции) - делим на 1 час (3600 секунд)
+    time_diff = (start_time - t1).total_seconds()
+    interval_seconds = 60 * 60  # ✅ 1 час в секундах (было 15 * 60)
+    alpha = time_diff / interval_seconds
+    
+    return k1, k2, t1, t2, alpha
+
+def _floor_to_hour(dt: datetime.datetime) -> datetime.datetime:
+    """Округляет время вниз до ближайшего целого часа."""
+    return dt.replace(minute=0, second=0, microsecond=0)
+
+
+_loaded_cache_files = {}  # Кэш загруженных файлов
+import logging
+logger = logging.getLogger(__name__)
+def _load_edge_k_from_cache(u, v, dt: datetime.datetime):
+    """
+    Загружает коэффициент пробок для ребра (u, v) из кэша для времени dt.
+    """
+    try:
+        from app.traffic_screen import get_screenshot_for_datetime
+        
+        screenshot_path = get_screenshot_for_datetime(dt)
+        cache_path = screenshot_path.with_suffix('.edge_cache.pkl')
+        
+        if not cache_path.exists():
+            return None
+        
+        # ✅ Кэшируем загруженный файл в памяти
+        cache_key = str(cache_path)
+        if cache_key not in _loaded_cache_files:
+            logger.info(f"📂 Loading cache file from disk: {cache_path.name}")
+            with open(cache_path, 'rb') as f:
+                _loaded_cache_files[cache_key] = pickle.load(f)
+        else:
+            logger.debug(f"📦 Using cached file from memory: {cache_path.name}")
+        
+        edge_cache = _loaded_cache_files[cache_key]
+        return edge_cache.get((u, v), 1.0)
+        
+    except Exception as e:
+        logger.error(f"❌ Error loading cache for edge ({u},{v}) at {dt}: {e}", exc_info=True)
+        return None
+
+
+def clear_interpolation_cache():
+    """Очищает кэш интерполированных значений и загруженных файлов."""
+    global _interpolated_k_cache, _loaded_cache_files
+    _interpolated_k_cache.clear()
+    _loaded_cache_files.clear()  # ✅ Очищаем кэш файлов при смене времени
+    logger.info("🧹 Interpolation cache cleared")
+
+# ==============================================================================
+# РАСЧЁТ МЕТРИК СЕГМЕНТА
+# ==============================================================================
+def _calc_segment_metrics(G, path, use_traffic, current_time=None):
     distance_meters = 0
     estimated_time_minutes = 0
     
@@ -177,7 +307,12 @@ def _calc_segment_metrics(G, path, use_traffic):
         if isinstance(highway_type, list): highway_type = highway_type[0]
         base_speed = SPEED_LIMITS.get(highway_type, 30)
         
-        traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
+        # ✅ ИСПОЛЬЗУЕМ ИНТЕРПОЛЯЦИЮ ЕСЛИ ЕСТЬ ВРЕМЯ
+        if current_time:
+            traffic_k = get_edge_k_for_time(u, v, G, use_traffic, current_time)
+        else:
+            traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
+        
         effective_speed = base_speed / traffic_k
         estimated_time_minutes += (length / (effective_speed / 3.6)) / 60
         
@@ -197,7 +332,15 @@ def calculate_route(start_addr, end_addr, use_traffic=True, departure_time=None,
     orig_node = ox.nearest_nodes(G, X=start_coords[1], Y=start_coords[0])
     dest_node = ox.nearest_nodes(G, X=end_coords[1], Y=end_coords[0])
     
-    # ОДНОЭТАПНЫЙ АЛГОРИТМ С ПРОБКАМИ
+    # Парсим время выезда для интерполяции
+    dep_dt = None
+    if departure_time:
+        try:
+            dep_dt = datetime.datetime.fromisoformat(departure_time.replace("Z", "+00:00"))
+        except:
+            pass
+    
+    # ОДНОЭТАПНЫЙ АЛГОРИТМ С ПРОБКАМИ И ИНТЕРПОЛЯЦИЕЙ
     def weight(u, v, data):
         min_cost = float('inf')
         valid_found = False
@@ -216,9 +359,13 @@ def calculate_route(start_addr, end_addr, use_traffic=True, departure_time=None,
                     not _is_near_point(mid_lat, mid_lon, end_coords[0], end_coords[1])):
                     penalty *= 3.0
             
-            if use_traffic:
+            # ✅ ИСПОЛЬЗУЕМ ИНТЕРПОЛЯЦИЮ
+            if use_traffic and dep_dt:
+                traffic_k = get_edge_k_for_time(u, v, G, use_traffic, dep_dt)
+            else:
                 traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
-                penalty *= min(traffic_k, 2.0)
+            
+            penalty *= min(traffic_k, 2.0)
             
             cost = length * penalty
             if cost < min_cost: min_cost = cost; valid_found = True
@@ -237,7 +384,8 @@ def calculate_route(start_addr, end_addr, use_traffic=True, departure_time=None,
     except nx.NetworkXNoPath:
         path = nx.shortest_path(G, source=orig_node, target=dest_node, weight=fallback_weight)
 
-    dist, t_min = _calc_segment_metrics(G, path, use_traffic)
+    # ✅ Передаём время в расчёт метрик
+    dist, t_min = _calc_segment_metrics(G, path, use_traffic, dep_dt)
     route_coords = [[G.nodes[n]['x'], G.nodes[n]['y']] for n in path]
 
     time_data = _process_time_logic(departure_time, arrival_time, t_min)
@@ -265,6 +413,14 @@ def calculate_route_by_coords(start_coords, end_coords, use_traffic=True, depart
     orig_node = ox.nearest_nodes(G, X=start_coords[1], Y=start_coords[0])
     dest_node = ox.nearest_nodes(G, X=end_coords[1], Y=end_coords[0])
 
+    # Парсим время выезда для интерполяции
+    dep_dt = None
+    if departure_time:
+        try:
+            dep_dt = datetime.datetime.fromisoformat(departure_time.replace("Z", "+00:00"))
+        except:
+            pass
+
     def weight(u, v, data):
         min_cost = float('inf')
         valid_found = False
@@ -281,9 +437,14 @@ def calculate_route_by_coords(start_coords, end_coords, use_traffic=True, depart
                 if (not _is_near_point(mid_lat, mid_lon, start_coords[0], start_coords[1]) and
                     not _is_near_point(mid_lat, mid_lon, end_coords[0], end_coords[1])):
                     penalty *= 3.0
-            if use_traffic:
+            
+            # ✅ ИСПОЛЬЗУЕМ ИНТЕРПОЛЯЦИЮ
+            if use_traffic and dep_dt:
+                traffic_k = get_edge_k_for_time(u, v, G, use_traffic, dep_dt)
+            else:
                 traffic_k = _get_edge_k_cached(u, v, G, use_traffic)
-                penalty *= min(traffic_k, 2.0)
+            
+            penalty *= min(traffic_k, 2.0)
             cost = length * penalty
             if cost < min_cost: min_cost = cost; valid_found = True
         return min_cost if valid_found else float('inf')
@@ -294,7 +455,8 @@ def calculate_route_by_coords(start_coords, end_coords, use_traffic=True, depart
         def fallback(u, v, data): return data.get('length', 0) * 50
         path = nx.shortest_path(G, source=orig_node, target=dest_node, weight=fallback)
 
-    dist, t_min = _calc_segment_metrics(G, path, use_traffic)
+    # ✅ Передаём время в расчёт метрик
+    dist, t_min = _calc_segment_metrics(G, path, use_traffic, dep_dt)
     route_coords = [[G.nodes[n]['x'], G.nodes[n]['y']] for n in path]
     time_data = _process_time_logic(departure_time, arrival_time, t_min)
 
@@ -309,19 +471,107 @@ def calculate_route_by_coords(start_coords, end_coords, use_traffic=True, depart
 # ==============================================================================
 # МНОГОТОЧЕЧНЫЙ МАРШРУТ
 # ==============================================================================
-def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = True, departure_time: str = None, arrival_time: str = None):
+# ==============================================================================
+# 🆕 ОПТИМИЗАЦИЯ ПОРЯДКА ТОЧЕК (TSP / 2-OPT)
+# ==============================================================================
+def _build_time_matrix(G, coords, use_traffic, base_time: datetime.datetime = None):
+    """Строит матрицу времени проезда между всеми парами точек."""
+    n = len(coords)
+    matrix = [[0.0] * n for _ in range(n)]
+    
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                # Используем существующую функцию для точного расчета времени между двумя точками
+                # Она уже учитывает барьеры, пробки и интерполяцию
+                result = calculate_route_by_coords(
+                    start_coords=coords[i], 
+                    end_coords=coords[j], 
+                    use_traffic=use_traffic, 
+                    departure_time=base_time.isoformat() if base_time else None
+                )
+                matrix[i][j] = result["time_min"]
+    return matrix
+
+def _optimize_order_2opt(indices, time_matrix):
+    """
+    Эвристика 2-opt для оптимизации порядка точек.
+    ВАЖНО: Индексы 0 (старт) и N-1 (финиш) остаются на своих местах!
+    """
+    n = len(indices)
+    if n <= 3:
+        return indices  # Оптимизация не нужна для 2-3 точек
+
+    best_order = indices[:]
+    improved = True
+    
+    while improved:
+        improved = False
+        # Перебираем только внутренние точки (от 1 до n-2)
+        for i in range(1, n - 2):
+            for j in range(i + 1, n - 1):
+                # Разворачиваем участок маршрута от i до j
+                new_order = best_order[:i] + best_order[i:j+1][::-1] + best_order[j+1:]
+                
+                # Считаем время нового и старого маршрута по матрице
+                new_time = sum(time_matrix[new_order[k]][new_order[k+1]] for k in range(n-1))
+                old_time = sum(time_matrix[best_order[k]][best_order[k+1]] for k in range(n-1))
+                
+                # Если стало быстрее, сохраняем и продолжаем поиск
+                if new_time < old_time:
+                    best_order = new_order
+                    improved = True
+                    
+    return best_order
+
+# ==============================================================================
+# МНОГОТОЧЕЧНЫЙ МАРШРУТ (ОБНОВЛЕННАЯ ВЕРСИЯ)
+# ==============================================================================
+def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = True, departure_time: str = None, arrival_time: str = None, optimize_order: bool = False):
     if len(waypoints_addrs) < 2:
         raise ValueError("Нужно минимум 2 точки")
         
     G, blocked_edges_set = get_graph()
     
+    # 1. Геокодируем все адреса
     coords = [geocode_address(addr) for addr in waypoints_addrs]
+    n = len(coords)
+    
+    # 2. Если включена оптимизация, переставляем точки
+    if optimize_order and n > 2:
+        logger.info(f"🔄 Запуск оптимизации порядка {n} точек (2-opt)...")
+        
+        # Парсим базовое время для построения матрицы
+        base_time = None
+        if departure_time:
+            try: base_time = datetime.datetime.fromisoformat(departure_time.replace("Z", "+00:00"))
+            except: pass
+            
+        # Строим матрицу времени N x N
+        time_matrix = _build_time_matrix(G, coords, use_traffic, base_time)
+        
+        # Оптимизируем порядок (индексы от 0 до n-1)
+        initial_indices = list(range(n))
+        optimized_indices = _optimize_order_2opt(initial_indices, time_matrix)
+        
+        # Пересобираем координаты и адреса в новом порядке
+        coords = [coords[i] for i in optimized_indices]
+        waypoints_addrs = [waypoints_addrs[i] for i in optimized_indices]
+        
+        logger.info(f"✅ Порядок оптимизирован. Экономия времени по матрице достигнута.")
+
+    # 3. Дальше идет стандартный расчет маршрута по уже (возможно) оптимизированному списку
     nodes = [ox.nearest_nodes(G, X=lon, Y=lat) for lat, lon in coords]
     
     full_path = []
     route_coords = []
     total_distance = 0
     total_time = 0
+    
+    current_time = None
+    if departure_time:
+        try: current_time = datetime.datetime.fromisoformat(departure_time.replace("Z", "+00:00"))
+        except: pass
     
     for i in range(len(nodes) - 1):
         u, v = nodes[i], nodes[i+1]
@@ -345,10 +595,12 @@ def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = 
                         not _is_near_point(mid_lat, mid_lon, end_c[0], end_c[1])):
                         penalty *= 3.0
                 
-                if use_traffic:
+                if use_traffic and current_time:
+                    traffic_k = get_edge_k_for_time(x, y, G, use_traffic, current_time)
+                else:
                     traffic_k = _get_edge_k_cached(x, y, G, use_traffic)
-                    penalty *= min(traffic_k, 2.0)
                 
+                penalty *= min(traffic_k, 2.0)
                 cost = length * penalty
                 if cost < min_cost: min_cost = cost; valid = True
             return min_cost if valid else float('inf')
@@ -372,7 +624,11 @@ def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = 
             highway_type = edge_data.get('highway', 'residential')
             if isinstance(highway_type, list): highway_type = highway_type[0]
             base_speed = SPEED_LIMITS.get(highway_type, 30)
-            traffic_k = _get_edge_k_cached(a, b, G, use_traffic)
+            
+            if use_traffic and current_time:
+                traffic_k = get_edge_k_for_time(a, b, G, use_traffic, current_time)
+            else:
+                traffic_k = _get_edge_k_cached(a, b, G, use_traffic)
             
             seg_time += (length / (base_speed / traffic_k / 3.6)) / 60
             if len(seg_path) > 2: seg_time += 0.08
@@ -380,6 +636,9 @@ def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = 
         route_coords.append([G.nodes[seg_path[-1]]['x'], G.nodes[seg_path[-1]]['y']])
         total_distance += seg_dist
         total_time += seg_time
+        
+        if current_time:
+            current_time += datetime.timedelta(minutes=seg_time)
         
     total_time *= 1.1
     
@@ -395,5 +654,6 @@ def calculate_multi_point_route(waypoints_addrs: List[str], use_traffic: bool = 
         "waypoints": wps,
         "has_barriers": False,
         "path": full_path,
+        "order_optimized": optimize_order, # ✅ Флаг для фронтенда
         **time_data
     }

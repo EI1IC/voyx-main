@@ -260,10 +260,14 @@ def get_screenshot_filename(weekday: str, hour: int, minute: int, season: str) -
     return SCREENSHOTS_DIR / f"{weekday}_{hour:02d}_{minute:02d}_{season}.png"
 
 def get_screenshot_for_datetime(dt: datetime.datetime) -> Path:
-    """Определяет путь к скриншоту на основе даты и времени"""
+    """
+    Определяет путь к скриншоту на основе даты и времени.
+    Для часовой интерполяции округляет до ЦЕЛОГО ЧАСА (minute=0).
+    """
     weekday = get_weekday_name(dt)
     season = get_season(dt.month)
-    dt_rounded = round_to_15_minutes(dt)
+    # ✅ Округляем до целого часа (7:32 → 7:00)
+    dt_rounded = dt.replace(minute=0, second=0, microsecond=0)
     return get_screenshot_filename(weekday, dt_rounded.hour, dt_rounded.minute, season)
 
 def is_screenshot_fresh(path: Path) -> bool:

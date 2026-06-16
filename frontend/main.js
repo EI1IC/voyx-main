@@ -83,12 +83,12 @@ function initTimeSelects() {
     minuteSelects.forEach(select => {
         if (!select) return;
         select.innerHTML = '<option value="">--</option>';
-        [0, 15, 30, 45].forEach(m => {
+        for (let m = 0; m < 60; m++) {
             const opt = document.createElement('option');
             opt.value = pad(m);
             opt.textContent = pad(m);
             select.appendChild(opt);
-        });
+        }
     });
 }
 
@@ -127,12 +127,11 @@ document.addEventListener('DOMContentLoaded', () => {
         panel.classList.toggle('open');
     });
 
-    // ⏰ Кнопка "сейчас" — ставит текущее время, округлённое до 15 минут
+    // ⏰ Кнопка "сейчас" — ставит текущее время
     document.getElementById('set-now')?.addEventListener('click', () => {
         const now = new Date();
         let h = now.getHours();
-        let m = roundMinutesTo15(now.getMinutes());
-        if (m === 60) { m = 0; h = (h + 1) % 24; }
+        let m = now.getMinutes();
         
         const pad = n => String(n).padStart(2, '0');
         setTimeToSelects('departure', `${pad(h)}:${pad(m)}`);
@@ -191,12 +190,14 @@ async function calculateRoute() {
     const arrTime = getTimeFromSelects('arrival');
     const arrDate = document.getElementById('arrival-date').value;
     const useTraffic = document.getElementById('use-traffic').checked;
+    const optimizeOrder = document.getElementById('optimize-order').checked;
 
     const payload = {
         start_address: startAddr,
         end_address: endAddr,
         waypoints: waypoints,
-        use_traffic: useTraffic
+        use_traffic: useTraffic,
+        optimize_order: optimizeOrder
     };
     
     const depISO = combineDateTime(depTime, depDate);
@@ -221,6 +222,27 @@ async function calculateRoute() {
         const data = res.data;
         if (!data?.route) throw new Error('Невалидный ответ');
 
+        if (data.order_optimized) {
+            showToast('Маршрут оптимизирован: порядок точек изменен', 'success');
+            
+            const container = document.getElementById('waypoints-container');
+            container.innerHTML = ''; // Очищаем старые поля
+            
+            // data.waypoints содержит [Старт, Точка1, Точка2, ..., Финиш]
+            // Берем только промежуточные точки (от 1 до length - 2)
+            for (let i = 1; i < data.waypoints.length - 1; i++) {
+                const wp = data.waypoints[i];
+                const div = document.createElement('div');
+                div.className = 'form-group waypoint-group';
+                div.innerHTML = `
+                    <span class="waypoint-text">${i}</span>
+                    <input type="text" class="waypoint-input" value="${wp.address}" placeholder="Промежуточная точка">
+                    <button class="btn-remove remove-btn">✕</button>
+                `;
+                container.appendChild(div);
+            }
+            updateWaypointNumbers(); // Обновляем нумерацию на всякий случай
+        }
         // 🕰️ Автозаполнение ТОЛЬКО поля отправления (если бэкенд его рассчитал)
         if (data.departure_iso) {
             const dt = new Date(data.departure_iso);
@@ -228,7 +250,6 @@ async function calculateRoute() {
             document.getElementById('departure-date').value = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
             setTimeToSelects('departure', `${pad(dt.getHours())}:${pad(dt.getMinutes())}`);
         }
-        // ✅ Поле прибытия НЕ автозаполняется
 
         // 🗺️ Очистка и отрисовка
         markers.forEach(m => m.remove()); markers = [];

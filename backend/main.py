@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 sys.path.insert(0, os.path.dirname(__file__))
 
-from route_engine import calculate_route, calculate_multi_point_route
+from route_engine import calculate_route, calculate_multi_point_route, clear_interpolation_cache
 from app.graph import init_graph
 from app.traffic_screen import (
     capture_current_screenshot, capture_screenshot_for_datetime,
@@ -71,6 +71,7 @@ class RouteRequest(BaseModel):
     use_traffic: bool = True
     departure_time: Optional[str] = None
     arrival_time: Optional[str] = None
+    optimize_order: bool = False
 
 @app.post("/api/route")
 async def route_api(req: RouteRequest):
@@ -101,9 +102,12 @@ async def route_api(req: RouteRequest):
                     if file_age > 900:
                         await capture_current_screenshot()
         
+        # ✅ Очищаем кэш интерполяции при смене временного контекста
+        clear_interpolation_cache()
+        
         if req.waypoints:
             all_points = [req.start_address] + req.waypoints + [req.end_address]
-            result = calculate_multi_point_route(all_points, req.use_traffic, req.departure_time, req.arrival_time)
+            result = calculate_multi_point_route(all_points, req.use_traffic, req.departure_time, req.arrival_time, req.optimize_order)
         else:
             result = calculate_route(req.start_address, req.end_address, req.use_traffic, req.departure_time, req.arrival_time)
         
