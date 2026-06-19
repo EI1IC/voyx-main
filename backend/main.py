@@ -79,6 +79,7 @@ app.add_middleware(CORSMiddleware,
                    allow_headers=["*"],
                   )
 @app.get("/")
+@app.head("/")
 async def root():
     """Корневой endpoint для проверки работоспособности"""
     return {
