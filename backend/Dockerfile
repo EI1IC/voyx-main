@@ -47,10 +47,12 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Установка Playwright и браузеров
-RUN playwright install chromium
+RUN playwright install --with-deps chromium
 
 # Копирование кода
 COPY . .
 
+EXPOSE 10000
+
 # Запуск сервера
-CMD ["python", "main.py"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-10000}"]
