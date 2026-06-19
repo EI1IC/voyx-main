@@ -1,6 +1,7 @@
 import './style.css'
 import maplibregl from 'maplibre-gl';
 import Toastify from 'toastify-js';
+import { API_BASE_URL } from './api.js';
 
 const map = new maplibregl.Map({
     container: 'map',
@@ -13,7 +14,6 @@ map.addControl(new maplibregl.NavigationControl(), 'top-right');
 map.on('error', (e) => console.error('Ошибка загрузки карты:', e));
 
 let markers = [];
-const API_BASE_URL = "https://super-parakeet-5w9wx75xjvv3rwp-8000.app.github.dev";
 
 function showToast(message, type = 'info') {
     const colors = { success: '#14752a', error: '#9e111f', warning: '#d5b721', info: '#062b6c' };
