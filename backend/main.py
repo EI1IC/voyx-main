@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 sys.path.insert(0, os.path.dirname(__file__))
 
-from route_engine import calculate_route, calculate_multi_point_route, clear_interpolation_cache
+from route_engine import get_graph, calculate_route, calculate_multi_point_route, clear_interpolation_cache
 from app.graph import init_graph
 from app.traffic_screen import (
     capture_current_screenshot, capture_screenshot_for_datetime,
@@ -30,7 +30,12 @@ from app.traffic_screen import (
 async def lifespan(app: FastAPI):
     logger.info("🚀 Инициализация...")
     
-    G, blocked_edges_set = get_graph()  # ✅ Получаем граф и заблокированные рёбра
+    try:
+        G, blocked_edges_set = get_graph()
+        logger.info("✅ Граф загружен")
+    except Exception as e:
+        logger.error(f"❌ Не удалось загрузить граф: {e}", exc_info=True)
+        raise
     
     # 1. Предзагрузка текущего скриншота (для работы с реальным временем)
     try:
@@ -62,7 +67,17 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Завершение...")
 
 app = FastAPI(title="Маршрутизация Киров", version="2.0.0", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware,
+                   allow_origins=[
+                       "https://ei1ic.github.io",
+                       "https://ei1ic.github.io/voyx-main",
+                       "http://localhost:3000",
+                       "http://localhost:5173",
+                   ],
+                   allow_credentials=True,
+                   allow_methods=["GET","POST","OPTIONS"],
+                   allow_headers=["*"],
+                  )
 
 class RouteRequest(BaseModel):
     start_address: str
