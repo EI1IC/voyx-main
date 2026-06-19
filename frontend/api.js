@@ -2,8 +2,19 @@
  * API client для подключения к backend серверу
  * Backend API: http://localhost:8000/api/route
  */
+function getApiUrl() {
+    const hostname = window.location.hostname;
+    
+    // Локальная разработка
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:8000';
+    }
+    
+    // Production (GitHub Pages) — ваш backend на Render
+    return 'https://voyx-backend.onrender.com';
+}
 
-const API_BASE_URL = process.env.API_URL || 'http://localhost:8000';
+export const API_BASE_URL = getApiUrl();
 
 /**
  * Рассчитывает маршрут между двумя адресами
