@@ -78,7 +78,19 @@ app.add_middleware(CORSMiddleware,
                    allow_methods=["GET","POST","OPTIONS"],
                    allow_headers=["*"],
                   )
-
+@app.get("/")
+async def root():
+    """Корневой endpoint для проверки работоспособности"""
+    return {
+        "service": "Voyx Route API",
+        "version": "2.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "route": "/api/route",
+            "docs": "/docs"
+        }
+    }
 class RouteRequest(BaseModel):
     start_address: str
     end_address: str
