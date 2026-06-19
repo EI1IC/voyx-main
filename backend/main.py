@@ -75,9 +75,24 @@ app.add_middleware(CORSMiddleware,
                        "http://localhost:5173",
                    ],
                    allow_credentials=True,
-                   allow_methods=["GET","POST","OPTIONS"],
+                   allow_methods=["GET","POST","OPTIONS","HEAD"],
                    allow_headers=["*"],
                   )
+
+@app.options("/{path:path}")
+async def options_handler(path: str):
+    """Обработка preflight запросов"""
+    from fastapi.responses import Response
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "https://ei1ic.github.io",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
+
 @app.get("/")
 @app.head("/")
 async def root():
