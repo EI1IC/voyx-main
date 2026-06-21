@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from dotenv import load_dotenv
-from route_engine import get_graph
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -70,28 +69,15 @@ app = FastAPI(title="Маршрутизация Киров", version="2.0.0", li
 app.add_middleware(CORSMiddleware,
                    allow_origins=[
                        "https://ei1ic.github.io",
-                       "https://ei1ic.github.io/voyx-main",
                        "http://localhost:3000",
                        "http://localhost:5173",
+                       "*",
                    ],
                    allow_credentials=True,
-                   allow_methods=["GET","POST","OPTIONS","HEAD"],
+                   allow_methods=["*"],
                    allow_headers=["*"],
                   )
 
-@app.options("/{path:path}")
-async def options_handler(path: str):
-    """Обработка preflight запросов"""
-    from fastapi.responses import Response
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": "https://ei1ic.github.io",
-            "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Max-Age": "3600",
-        }
-    )
 
 @app.get("/")
 @app.head("/")
