@@ -1,5 +1,5 @@
 {
-  "name": "voyx-frontend",
+  "name": "voyx-main-frontend",
   "version": "1.0.0",
   "description": "Frontend for route calculation app",
   "private": true,

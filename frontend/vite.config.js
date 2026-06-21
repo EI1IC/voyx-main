@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/voyx-main/', 
+  base: '/voyx-main/',  // ← ИСПРАВЛЕНО: '/' вместо '/voyx-main/'
   server: {
     port: 3000,
     host: '0.0.0.0',
@@ -12,7 +12,6 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   },

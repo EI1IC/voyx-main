@@ -67,13 +67,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Маршрутизация Киров", version="2.0.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware,
-                   allow_origins=[
-                       "https://ei1ic.github.io",
-                       "http://localhost:3000",
-                       "http://localhost:5173",
-                       "*",
-                   ],
-                   allow_credentials=True,
+                   allow_origins=["*"],
+                   allow_credentials=False,
                    allow_methods=["*"],
                    allow_headers=["*"],
                   )
@@ -84,7 +79,7 @@ app.add_middleware(CORSMiddleware,
 async def root():
     """Корневой endpoint для проверки работоспособности"""
     return {
-        "service": "Voyx Route API",
+        "service": "voyx-main Route API",
         "version": "2.0.0",
         "status": "running",
         "endpoints": {
