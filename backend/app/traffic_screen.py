@@ -326,7 +326,7 @@ async def capture_screenshot_for_datetime(date_time: datetime.datetime, output_p
     url = build_historical_traffic_url(date_time, center_lon, center_lat)
     
     async with Stealth().use_async(async_playwright()) as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", "--disable-gpu", "--disable-web-security", "--disable-features=IsolateOrigins,site-per-process"])
+        browser = await p.chromium.launch(headless=True, args=["--single-process","--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", "--disable-gpu", "--disable-web-security", "--disable-features=IsolateOrigins,site-per-process"])
         context = await browser.new_context(viewport=VIEWPORT, user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", locale="ru-RU", timezone_id="Europe/Moscow")
         page = await context.new_page()
         
@@ -372,7 +372,7 @@ async def capture_current_screenshot(output_path: Path = None):
     
     _invalidate_cache()
     async with Stealth().use_async(async_playwright()) as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", "--disable-gpu", "--disable-web-security", "--disable-features=IsolateOrigins,site-per-process"])
+        browser = await p.chromium.launch(headless=True, args=["--single-process","--no-sandbox", "--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage", "--disable-gpu", "--disable-web-security", "--disable-features=IsolateOrigins,site-per-process"])
         context = await browser.new_context(viewport=VIEWPORT, user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", locale="ru-RU", timezone_id="Europe/Moscow")
         page = await context.new_page()
         
