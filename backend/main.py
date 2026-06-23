@@ -1,5 +1,5 @@
 # backend/main.py
-import os, sys, logging, time
+import os, sys, logging, time, asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -103,6 +103,13 @@ class RouteRequest(BaseModel):
     arrival_time: Optional[str] = None
     optimize_order: bool = False
 
+async def _update_screenshot_background():
+    """Фоновое обновление скриншота (не блокирует запрос)"""
+    try:
+        await capture_current_screenshot()
+    except Exception as e:
+        logger.error(f"❌ Фоновый скриншот не создан: {e}")
+
 @app.post("/api/route")
 async def route_api(req: RouteRequest):
     try:
@@ -126,11 +133,11 @@ async def route_api(req: RouteRequest):
             else:
                 set_traffic_image_path(IMG_PATH_CURRENT)
                 if not IMG_PATH_CURRENT.exists():
-                    await capture_current_screenshot()
+                    asyncio.create_task(_update_screenshot_background())
                 else:
                     file_age = time.time() - IMG_PATH_CURRENT.stat().st_mtime
                     if file_age > 900:
-                        await capture_current_screenshot()
+                        asyncio.create_task(_update_screenshot_background())
         
         # ✅ Очищаем кэш интерполяции при смене временного контекста
         clear_interpolation_cache()

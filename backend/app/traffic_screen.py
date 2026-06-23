@@ -361,47 +361,85 @@ async def capture_screenshot_for_datetime(date_time: datetime.datetime, output_p
         finally:
             await browser.close()
 
+import asyncio
+
 async def capture_current_screenshot(output_path: Path = None):
+    """Создаёт скриншот с оптимизациями для Render (в фоне, с таймаутом)"""
     global _last_capture_time
-    if output_path is None: output_path = IMG_PATH_CURRENT
+    
+    if output_path is None:
+        output_path = IMG_PATH_CURRENT
+    
+    # ✅ Проверка кэша
     if output_path.exists():
         file_age = time.time() - output_path.stat().st_mtime
-        if file_age < 900:
-            logger.info(f"📦 Используем кэшированный текущий скриншот (возраст {file_age/60:.1f} мин)")
+        if file_age < 900:  # 15 минут
+            logger.info(f"📦 Кэшированный скриншот (возраст {file_age/60:.1f} мин)")
             return output_path
     
     _invalidate_cache()
-    async with Stealth().use_async(async_playwright()) as p:
-        browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage""--use-gl=swiftshader","--enable-webgl","--ignore-gpu-blacklist"])
-        context = await browser.new_context(viewport=VIEWPORT, user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", locale="ru-RU", timezone_id="Europe/Moscow")
-        page = await context.new_page()
+    
+    async def _capture_impl():
+        from playwright.async_api import async_playwright
         
-        try:
-            url = f"https://yandex.ru/maps/46/kirov/probki/?l=sat%2Ctrf&ll={MAP_CENTER_LON}%2C{MAP_CENTER_LAT}&z=14"
-            logger.info(f" Открываю: {url[:80]}...")
-            await page.goto(url, wait_until="networkidle", timeout=25000)
-            try: await page.wait_for_load_state("networkidle", timeout=8000)
-            except: pass
-            try: await page.click('span.sidebar-toggle-button__icon', timeout=2000)
-            except: pass
+        async with async_playwright() as p:
+            # ✅ Оптимизированные флаги для Render
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--use-gl=swiftshader",
+                    "--enable-webgl",
+                    "--ignore-gpu-blacklist",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-default-apps",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--no-first-run",
+                    "--mute-audio",
+                ]
+            )
             
-            await page.evaluate("""() => { document.querySelectorAll('.header__top, .cookie-banner, .copyrights-pane, .logo, .sidebar-toggle-button').forEach(el => el.style.display = 'none'); }""")
-            await page.wait_for_timeout(1500)
-            
-            if await page.query_selector('text="Подтвердите, что вы не робот"'):
-                logger.warning("⚠️ CAPTCHA. Пропускаю захват.")
-                return None
-            
-            await page.screenshot(path=str(output_path), full_page=False)
-            _last_capture_time = time.time()
-            logger.info(f"📸 Текущий скриншот сохранён: {output_path}")
-            return output_path
-        except Exception as e:
-            logger.error(f"❌ Ошибка захвата: {e}", exc_info=True)
-            return None
-        finally:
-            await browser.close()
-
+            try:
+                page = await browser.new_page(
+                    viewport={"width": 1280, "height": 720},
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    locale="ru-RU",
+                    timezone_id="Europe/Moscow",
+                )
+                
+                url = f"https://yandex.ru/maps/46/kirov/probki/?l=sat%2Ctrf&ll={MAP_CENTER_LON}%2C{MAP_CENTER_LAT}&z=14"
+                logger.info(f"🌐 Открываю: {url[:80]}...")
+                
+                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                await page.wait_for_timeout(5000)
+                
+                # Скрываем лишние элементы
+                await page.evaluate("""() => {
+                    document.querySelectorAll('.header__top, .cookie-banner, .copyrights-pane, .logo')
+                        .forEach(el => el.style.display = 'none');
+                }""")
+                
+                await page.screenshot(path=str(output_path), full_page=False)
+                _last_capture_time = time.time()
+                logger.info(f"📸 Скриншот сохранён: {output_path}")
+                return output_path
+                
+            finally:
+                await browser.close()
+    
+    try:
+        # ✅ Таймаут 30 секунд
+        return await asyncio.wait_for(_capture_impl(), timeout=30.0)
+    except asyncio.TimeoutError:
+        logger.warning("⚠️ Скриншот: таймаут 30 секунд")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Ошибка скриншота: {e}", exc_info=False)
+        return None
+        
 async def update_all_seasonal_screenshots():
     logger.info("🔄 Начинаю обновление всех сезонных скриншотов...")
     now = datetime.datetime.now()
