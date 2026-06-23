@@ -35,20 +35,163 @@ _edge_k_cache = {}
 # Кэш для интерполированных значений
 _interpolated_k_cache = {}
 
+import json
+from pathlib import Path
+
+_KNOWN_ADDRESSES_FILE = Path(__file__).parent / "known_addresses.json"
+_KNOWN_ADDRESSES_CACHE = {}
+_KNOWN_ADDRESSES_MTIME = None
+
+def _load_known_addresses():
+    """
+    Загружает словарь известных адресов из JSON-файла.
+    Автоматически перезагружает при изменении файла (для разработки).
+    """
+    global _KNOWN_ADDRESSES_CACHE, _KNOWN_ADDRESSES_MTIME
+    
+    try:
+        stat = _KNOWN_ADDRESSES_FILE.stat()
+        mtime = stat.st_mtime
+        
+        # Если файл не менялся — используем кэш
+        if _KNOWN_ADDRESSES_MTIME == mtime and _KNOWN_ADDRESSES_CACHE:
+            return _KNOWN_ADDRESSES_CACHE
+        
+        # Загружаем файл
+        with open(_KNOWN_ADDRESSES_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Фильтруем служебные ключи (начинаются с _)
+        _KNOWN_ADDRESSES_CACHE = {
+            k.lower(): tuple(v) 
+            for k, v in data.items() 
+            if not k.startswith('_')
+        }
+        _KNOWN_ADDRESSES_MTIME = mtime
+        
+        logger.info(f"📚 Загружено {len(_KNOWN_ADDRESSES_CACHE)} известных адресов из {_KNOWN_ADDRESSES_FILE.name}")
+        return _KNOWN_ADDRESSES_CACHE
+        
+    except FileNotFoundError:
+        logger.warning(f"⚠️ Файл известных адресов не найден: {_KNOWN_ADDRESSES_FILE}")
+        return {}
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ Ошибка в JSON-файле известных адресов: {e}")
+        return {}
+    except Exception as e:
+        logger.error(f"❌ Ошибка загрузки известных адресов: {e}")
+        return {}
+
 # ==============================================================================
-# ГЕОКОДИРОВАНИЕ
+# ГЕОКОДИРОВАНИЕ С ПРОВЕРКОЙ СЛОВАРЯ
 # ==============================================================================
 @lru_cache(maxsize=1000)
 def geocode_address(address_query, city="Kirov, Russia"):
+    """
+    Геокодирует адрес.
+    Сначала проверяет словарь известных адресов, потом osmnx.
+    """
+    import re
+    
+    # ✅ Проверка номера дома (отрицательный или нулевой)
+    numbers = re.findall(r'-?\d+', address_query)
+    if numbers:
+        house_number = int(numbers[-1])
+        if house_number <= 0:
+            raise ValueError(
+                f"Некорректный номер дома в адресе '{address_query}': "
+                f"номер должен быть больше 0."
+            )
+    
+    # ✅ ПРОВЕРКА СЛОВАРЯ известных адресов
+    known_coords = _lookup_known_address(address_query)
+    if known_coords:
+        lat, lon = known_coords
+        logger.info(f"📚 '{address_query}' → ({lat:.6f}, {lon:.6f}) из словаря")
+        return lat, lon
+    
+    # ✅ Если в словаре нет — идём в osmnx
     if "Киров" in address_query or "Kirov" in address_query:
         full_query = address_query
     else:
         full_query = f"{address_query}, {city}"
+    
     try:
         location = ox.geocode(full_query)
-        return float(location[0]), float(location[1])
+        lat, lon = float(location[0]), float(location[1])
     except Exception as e:
         raise ValueError(f"Не удалось найти адрес '{address_query}': {str(e)}")
+    
+    # ✅ Проверка границ Кирова
+    KIROV_BBOX = {
+        'min_lat': 58.556461,
+        'max_lat': 58.647655,
+        'min_lon': 49.540100,
+        'max_lon': 49.714165,
+    }
+    
+    if not (KIROV_BBOX['min_lat'] <= lat <= KIROV_BBOX['max_lat'] and
+            KIROV_BBOX['min_lon'] <= lon <= KIROV_BBOX['max_lon']):
+        raise ValueError(
+            f"Адрес '{address_query}' найден за пределами Кирова "
+            f"(координаты: {lat:.4f}, {lon:.4f}). "
+            f"Убедитесь, что адрес указан правильно."
+        )
+    
+    return lat, lon
+
+
+def _lookup_known_address(address_query):
+    """
+    Ищет адрес в JSON-файле известных адресов.
+    Возвращает (lat, lon) или None.
+    """
+    import re
+    
+    # Загружаем словарь (с кэшированием)
+    known = _load_known_addresses()
+    if not known:
+        return None
+    
+    # Нормализуем адрес
+    addr = address_query.lower().strip()
+    
+    # Убираем всё лишнее: город, тип улицы, слово "дом", запятые
+    addr = re.sub(r'\b(киров|kirov)\b', '', addr, flags=re.IGNORECASE)
+    addr = re.sub(
+        r'\b(улица|ул\.|проспект|пр\.|пр-т|переулок|пер\.|бульвар|бул\.)\s*',
+        '', addr
+    )
+    addr = re.sub(
+        r'\b(дом|д\.|корпус|к\.|строение|стр\.|литер|лит\.)\s*',
+        '', addr
+    )
+    addr = addr.replace(',', ' ').strip()
+    addr = ' '.join(addr.split())
+    
+    # ✅ 1. ТОЧНОЕ совпадение
+    if addr in known:
+        return known[addr]
+    
+    # ✅ 2. Совпадение по улице + номеру дома (умная проверка)
+    # Извлекаем название улицы и номер дома из нормализованного адреса
+    match = re.match(r'^(.+?)\s+(\d+(?:[а-яА-Я]|\/\d+)?)\s*$', addr)
+    if match:
+        street = match.group(1).strip()
+        house = match.group(2).strip()
+        
+        # Ищем в словаре адрес с такой же улицей и номером дома
+        for key, coords in known.items():
+            key_match = re.match(r'^(.+?)\s+(\d+(?:[а-яА-Я]|\/\d+)?)\s*$', key)
+            if key_match:
+                key_street = key_match.group(1).strip()
+                key_house = key_match.group(2).strip()
+                
+                # ✅ Проверяем ТОЧНОЕ совпадение улицы И номера дома
+                if key_street == street and key_house == house:
+                    return coords
+    
+    return None
 
 # ==============================================================================
 # УПРАВЛЕНИЕ ГРАФОМ

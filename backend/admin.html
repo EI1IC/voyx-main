@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Админка</title>
+    <style>
+        body { font-family: Arial; max-width: 600px; margin: 40px auto; padding: 20px; }
+        input { width: 100%; padding: 8px; margin: 5px 0; box-sizing: border-box; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        .item { padding: 10px; margin: 5px 0; background: #f0f0f0; display: flex; justify-content: space-between; }
+        .msg { padding: 10px; margin: 10px 0; border-radius: 4px; display: none; }
+        .msg.success { background: #d4edda; color: #155724; }
+        .msg.error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>Известные адреса</h1>
+    
+    <div id="msg" class="msg"></div>
+    
+    <h3>Добавить</h3>
+    <input type="text" id="addr" placeholder="адрес (нижний регистр)">
+    <input type="number" step="0.000001" id="lat" placeholder="широта">
+    <input type="number" step="0.000001" id="lon" placeholder="долгота">
+    <button onclick="addAddress()">Добавить</button>
+    
+    <h3>Список</h3>
+    <button onclick="loadAddresses()">Обновить</button>
+    <div id="list"></div>
+    
+    <script>
+        function showMsg(text, isError) {
+            const el = document.getElementById('msg');
+            el.textContent = text;
+            el.className = 'msg ' + (isError ? 'error' : 'success');
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
+        }
+        
+        async function addAddress() {
+            const addr = document.getElementById('addr').value.trim().toLowerCase();
+            const lat = parseFloat(document.getElementById('lat').value);
+            const lon = parseFloat(document.getElementById('lon').value);
+            
+            if (!addr || isNaN(lat) || isNaN(lon)) {
+                showMsg('Заполните все поля', true);
+                return;
+            }
+            
+            try {
+                const res = await fetch('/api/admin/addresses', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({address: addr, lat: lat, lon: lon})
+                });
+                
+                if (res.ok) {
+                    showMsg('✅ Добавлено', false);
+                    document.getElementById('addr').value = '';
+                    document.getElementById('lat').value = '';
+                    document.getElementById('lon').value = '';
+                    loadAddresses();
+                } else {
+                    const err = await res.json();
+                    showMsg('❌ ' + (err.detail || 'Ошибка'), true);
+                }
+            } catch (e) {
+                showMsg('❌ ' + e.message, true);
+            }
+        }
+        
+        async function deleteAddress(addr) {
+            if (!confirm('Удалить "' + addr + '"?')) return;
+            
+            try {
+                const res = await fetch('/api/admin/addresses/' + encodeURIComponent(addr), {
+                    method: 'DELETE'
+                });
+                
+                if (res.ok) {
+                    showMsg('🗑️ Удалено', false);
+                    loadAddresses();
+                } else {
+                    const err = await res.json();
+                    showMsg('❌ ' + (err.detail || 'Ошибка'), true);
+                }
+            } catch (e) {
+                showMsg('❌ ' + e.message, true);
+            }
+        }
+        
+        async function loadAddresses() {
+            try {
+                const res = await fetch('/api/admin/addresses');
+                const data = await res.json();
+                
+                let html = '<p><strong>Всего: ' + data.count + '</strong></p>';
+                
+                if (data.count === 0) {
+                    html += '<p>Список пуст</p>';
+                } else {
+                    for (const [addr, coords] of Object.entries(data.addresses)) {
+                        html += '<div class="item">';
+                        html += '<span><strong>' + addr + '</strong> → [' + coords[0] + ', ' + coords[1] + ']</span>';
+                        html += '<button onclick="deleteAddress(\'' + addr.replace(/'/g, "\\'") + '\')">Удалить</button>';
+                        html += '</div>';
+                    }
+                }
+                
+                document.getElementById('list').innerHTML = html;
+            } catch (e) {
+                showMsg('❌ Ошибка загрузки: ' + e.message, true);
+            }
+        }
+        
+        // Загружаем список при открытии страницы
+        loadAddresses();
+    </script>
+</body>
+</html>

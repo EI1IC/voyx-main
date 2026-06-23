@@ -54,11 +54,11 @@ function createMarker(lng, lat, emoji, popupText) {
 }
 
 // ==============================================================================
-// 🕐 ИНИЦИАЛИЗАЦИЯ ВЫПАДАЮЩИХ СПИСКОВ ВРЕМЕНИ
+// ИНИЦИАЛИЗАЦИЯ ВЫПАДАЮЩИХ СПИСКОВ ВРЕМЕНИ
 // ==============================================================================
 function initTimeSelects() {
     const pad = n => String(n).padStart(2, '0');
-    
+
     // Заполняем часы (00-23)
     const hourSelects = [
         document.getElementById('departure-hour'),
@@ -74,7 +74,7 @@ function initTimeSelects() {
             select.appendChild(opt);
         }
     });
-    
+
     // Заполняем минуты (только 0, 15, 30, 45)
     const minuteSelects = [
         document.getElementById('departure-minute'),
@@ -110,35 +110,31 @@ function setTimeToSelects(prefix, timeStr) {
     if (mSelect) mSelect.value = m;
 }
 
-// Округление минут до ближайших 15
-function roundMinutesTo15(minutes) {
-    return Math.round(minutes / 15) * 15;
-}
 
 document.addEventListener('DOMContentLoaded', () => {
     // Инициализируем выпадающие списки
     initTimeSelects();
-    
+
     const toggle = document.getElementById('params-toggle');
     const panel = document.getElementById('params-panel');
-    
+
     toggle?.addEventListener('click', () => {
         toggle.classList.toggle('open');
         panel.classList.toggle('open');
     });
 
-    // ⏰ Кнопка "сейчас" — ставит текущее время
+    //Кнопка "сейчас" — ставит текущее время
     document.getElementById('set-now')?.addEventListener('click', () => {
         const now = new Date();
         let h = now.getHours();
         let m = now.getMinutes();
-        
+
         const pad = n => String(n).padStart(2, '0');
         setTimeToSelects('departure', `${pad(h)}:${pad(m)}`);
         document.getElementById('departure-date').value = now.toISOString().slice(0, 10);
     });
 
-    // 🔄 Кнопка "сброс" — очищает поля прибытия
+    //Кнопка "сброс" — очищает поля прибытия
     document.getElementById('reset-arrival')?.addEventListener('click', () => {
         document.getElementById('arrival-hour').value = '';
         document.getElementById('arrival-minute').value = '';
@@ -158,7 +154,7 @@ function combineDateTime(timeVal, dateVal) {
     if (!timeVal || !dateVal) return null;
     const [h, m] = timeVal.split(':').map(Number);
     const [y, mo, d] = dateVal.split('-').map(Number);
-    
+
     const pad = n => String(n).padStart(2, '0');
     return `${y}-${pad(mo)}-${pad(d)}T${pad(h)}:${pad(m)}:00+03:00`;
 }
@@ -167,13 +163,25 @@ async function calculateRoute() {
     const startAddr = document.getElementById('start').value;
     const endAddr = document.getElementById('end').value;
     const waypoints = getWaypoints();
-    
+
+    // Базовая валидация
     if (!startAddr.trim() || !endAddr.trim()) {
         showToast('Пожалуйста, заполните адреса старта и финиша', 'warning');
         return;
     }
 
-    // ✅ Панель параметров НЕ закрывается
+    const allAddresses = [startAddr, endAddr, ...waypoints];
+    for (const addr of allAddresses) {
+        if (!addr.trim()) continue;
+        const numbers = addr.match(/-?\d+/g);
+        if (numbers) {
+            const lastNumber = parseInt(numbers[numbers.length - 1]);
+            if (lastNumber <= 0) {
+                showToast(`🏠 Некорректный номер дома в адресе: «${addr}»`, 'warning');
+                return;
+            }
+        }
+    }
 
     const btn = document.getElementById('calculate-btn');
     const loading = document.getElementById('loading');
@@ -199,10 +207,10 @@ async function calculateRoute() {
         use_traffic: useTraffic,
         optimize_order: optimizeOrder
     };
-    
+
     const depISO = combineDateTime(depTime, depDate);
     const arrISO = combineDateTime(arrTime, arrDate);
-    
+
     if (depISO) payload.departure_time = depISO;
     if (arrISO) payload.arrival_time = arrISO;
 
@@ -214,8 +222,16 @@ async function calculateRoute() {
         });
 
         if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Ошибка сервера: ${response.status} - ${errText}`);
+            // Парсим JSON-ответ от FastAPI
+            let errorMessage = `Ошибка сервера: ${response.status}`;
+            try {
+                const errData = await response.json();
+                errorMessage = errData.detail || errorMessage;
+            } catch {
+                const errText = await response.text();
+                if (errText) errorMessage = errText;
+            }
+            throw new Error(errorMessage);
         }
 
         const res = await response.json();
@@ -223,13 +239,11 @@ async function calculateRoute() {
         if (!data?.route) throw new Error('Невалидный ответ');
 
         if (data.order_optimized) {
-            showToast('Маршрут оптимизирован: порядок точек изменен', 'success');
-            
+            showToast('Маршрут оптимизирован: порядок точек изменён', 'success');
+
             const container = document.getElementById('waypoints-container');
-            container.innerHTML = ''; // Очищаем старые поля
-            
-            // data.waypoints содержит [Старт, Точка1, Точка2, ..., Финиш]
-            // Берем только промежуточные точки (от 1 до length - 2)
+            container.innerHTML = '';
+
             for (let i = 1; i < data.waypoints.length - 1; i++) {
                 const wp = data.waypoints[i];
                 const div = document.createElement('div');
@@ -241,17 +255,17 @@ async function calculateRoute() {
                 `;
                 container.appendChild(div);
             }
-            updateWaypointNumbers(); // Обновляем нумерацию на всякий случай
+            updateWaypointNumbers();
         }
-        // 🕰️ Автозаполнение ТОЛЬКО поля отправления (если бэкенд его рассчитал)
+
         if (data.departure_iso) {
             const dt = new Date(data.departure_iso);
             const pad = n => String(n).padStart(2, '0');
-            document.getElementById('departure-date').value = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
+            document.getElementById('departure-date').value = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
             setTimeToSelects('departure', `${pad(dt.getHours())}:${pad(dt.getMinutes())}`);
         }
 
-        // 🗺️ Очистка и отрисовка
+        //Очистка и отрисовка
         markers.forEach(m => m.remove()); markers = [];
         if (map.getLayer('route-line')) map.removeLayer('route-line');
         if (map.getSource('route-data')) map.removeSource('route-data');
@@ -277,17 +291,17 @@ async function calculateRoute() {
         routeCoords.forEach(c => bounds.extend(c));
         map.fitBounds(bounds, { padding: 50, duration: 1000 });
 
-        // 📊 Обновление результатов
+        // Обновление результатов
         document.getElementById('dist').textContent = data.distance_km + ' км';
         document.getElementById('time').textContent = data.time_min + ' мин';
-        
+
         const depCard = document.getElementById('dep-card');
         const arrCard = document.getElementById('arr-card');
         if (data.departure_time_display) {
             depCard.style.display = 'block';
             document.getElementById('dep-display').textContent = data.departure_time_display;
         } else depCard.style.display = 'none';
-        
+
         if (data.arrival_time_display) {
             arrCard.style.display = 'block';
             document.getElementById('arr-display').textContent = data.arrival_time_display;
@@ -295,12 +309,41 @@ async function calculateRoute() {
 
         if (data.time_mismatch) document.getElementById('time-mismatch-warning').classList.add('show');
         if (data.has_barriers) document.getElementById('barrier-warning').classList.add('show');
-        
+
         results.classList.add('active');
 
+        showToast(`Маршрут построен`, 'success');
+
     } catch (err) {
-        console.error('💥 Ошибка:', err);
-        showToast('Ошибка сервера: ' + err.message, 'error');
+        console.error('Ошибка:', err);
+
+        // Разные уведомления для разных типов ошибок
+        const msg = err.message || 'Неизвестная ошибка';
+        let toastType = 'error';
+        let toastMsg = msg;
+
+        if (msg.includes('за пределами Кирова')) {
+            toastType = 'warning';
+            toastMsg = `${msg}`;
+        } else if (msg.includes('Не удалось найти адрес')) {
+            toastType = 'error';
+            toastMsg = `${msg}`;
+        } else if (msg.includes('Некорректный номер дома')) {
+            toastType = 'warning';
+            toastMsg = `${msg}`;
+        } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+            toastType = 'error';
+            toastMsg = 'Нет связи с сервером. Попробуйте позже.';
+        } else if (msg.includes('500')) {
+            toastType = 'error';
+            toastMsg = 'Внутренняя ошибка сервера';
+        } else if (msg.includes('400')) {
+            toastType = 'warning';
+            toastMsg = `${msg}`;
+        }
+
+        showToast(toastMsg, toastType);
+
     } finally {
         btn.disabled = false;
         loading.style.display = 'none';

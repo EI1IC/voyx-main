@@ -7,6 +7,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 from dotenv import load_dotenv
+import json
+from fastapi.responses import HTMLResponse
+
+# Секретный путь для админки (задаётся в Render → Environment Variables)
+ADMIN_SECRET = os.getenv('ADMIN_SECRET', 'voyx-admin-secret-path-change-me')
+KNOWN_ADDRESSES_FILE = Path(__file__).parent / "known_addresses.json"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -207,6 +213,88 @@ async def health_check():
         "traffic_metadata": metadata,
         "api_version": "2.0.0"
     }
+
+# ==============================================================================
+# ПРОСТАЯ АДМИН-ПАНЕЛЬ (секретная ссылка)
+# ==============================================================================
+@app.get(f"/{ADMIN_SECRET}")
+async def admin_page():
+    """Простая админ-панель по секретной ссылке."""
+    html_path = Path(__file__).parent / "admin.html"
+    try:
+        html = html_path.read_text(encoding='utf-8')
+        return HTMLResponse(content=html)
+    except FileNotFoundError:
+        return HTMLResponse(
+            content="<h1>Файл admin.html не найден</h1>",
+            status_code=500
+        )
+
+
+@app.get("/api/admin/addresses")
+async def get_known_addresses():
+    """Получить список адресов."""
+    try:
+        with open(KNOWN_ADDRESSES_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        addresses = {k: v for k, v in data.items() if not k.startswith('_')}
+        return {"count": len(addresses), "addresses": addresses}
+    except FileNotFoundError:
+        return {"count": 0, "addresses": {}}
+
+
+@app.post("/api/admin/addresses")
+async def add_known_address(request: dict):
+    """Добавить адрес."""
+    address = request.get('address', '').lower().strip()
+    lat = request.get('lat')
+    lon = request.get('lon')
+    
+    if not address or lat is None or lon is None:
+        raise HTTPException(400, "Укажите address, lat и lon")
+    
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "lat и lon должны быть числами")
+    
+    try:
+        with open(KNOWN_ADDRESSES_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        data = {}
+    
+    data[address] = [lat, lon]
+    
+    with open(KNOWN_ADDRESSES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    logger.info(f"✅ Добавлен адрес: {address} → ({lat}, {lon})")
+    return {"status": "ok"}
+
+
+@app.delete("/api/admin/addresses/{address}")
+async def delete_known_address(address: str):
+    """Удалить адрес."""
+    address = address.lower().strip()
+    
+    try:
+        with open(KNOWN_ADDRESSES_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        if address not in data:
+            raise HTTPException(404, "Не найден")
+        
+        del data[address]
+        
+        with open(KNOWN_ADDRESSES_FILE, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"🗑️ Удалён адрес: {address}")
+        return {"status": "ok"}
+    except FileNotFoundError:
+        raise HTTPException(404, "Файл не найден")
 
 if __name__ == "__main__":
     import uvicorn
