@@ -70,7 +70,7 @@ def _fallback_route(G: nx.Graph, orig_node, dest_node, blocked_edges_set: set) -
             if (u, v, key) in blocked_edges_set:
                 return length + 10000
         return length
-    return nx.astar_path(G, orig_node, dest_node, weight=fallback_weight, heuristic=lambda u, v: _haversine_heuristic(u, v, G))
+    return nx.shortest_path(G, orig_node, dest_node, weight=fallback_weight, heuristic=lambda u, v: _haversine_heuristic(u, v, G))
 
 
 def calculate_route(start_addr: str, end_addr: str, use_traffic: bool = True) -> dict:
@@ -91,7 +91,7 @@ def calculate_route(start_addr: str, end_addr: str, use_traffic: bool = True) ->
             raise RuntimeError("Требуется scikit-learn. Установите: pip install -r requirements.txt") from e
         raise
 
-    # ✅ Весовая функция с прямым анализом скриншота
+    # Весовая функция с прямым анализом скриншота
     def route_weight(u, v, data):
         for key in G.get_edge_data(u, v).keys():
             if (u, v, key) in blocked_edges_set:
@@ -103,7 +103,7 @@ def calculate_route(start_addr: str, end_addr: str, use_traffic: bool = True) ->
         return base
     
     try:
-        path = nx.astar_path(G, orig_node, dest_node, weight=route_weight, heuristic=lambda u, v: _haversine_heuristic(u, v, G))
+        path = nx.shortest_path(G, orig_node, dest_node, weight=route_weight)
         used_fallback = False
     except nx.NetworkXNoPath:
         path = _fallback_route(G, orig_node, dest_node, blocked_edges_set)
@@ -162,7 +162,7 @@ def calculate_multi_point_route(waypoints: List[str], use_traffic: bool = True) 
             return base
             
         try:
-            path = nx.astar_path(G, orig_node, dest_node, weight=seg_weight, heuristic=lambda u, v: _haversine_heuristic(u, v, G))
+            path = nx.shortest_path(G, orig_node, dest_node, weight=seg_weight)
         except nx.NetworkXNoPath:
             path = _fallback_route(G, orig_node, dest_node, blocked_edges_set)
             has_barriers = True
