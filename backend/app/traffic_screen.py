@@ -67,9 +67,9 @@ def save_pixel_cache(image_path: Path, cache: dict):
     try:
         with open(cache_path, 'wb') as f:
             pickle.dump(cache, f)
-        logger.info(f"💾 Кэш сохранён на диск: {cache_path.name} ({len(cache)} пикселей)")
+        logger.info(f"Кэш сохранён на диск: {cache_path.name} ({len(cache)} пикселей)")
     except Exception as e:
-        logger.error(f"❌ Ошибка сохранения кэша: {e}")
+        logger.error(f"Ошибка сохранения кэша: {e}")
 
 def build_pixel_cache(image: Image.Image) -> dict:
     """Создаёт кэш пикселей для изображения (тяжелая операция)"""
@@ -103,7 +103,7 @@ def save_metadata(metadata: dict):
         with open(METADATA_FILENAME, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        logger.error(f"❌ Ошибка записи metadata.json: {e}")
+        logger.error(f"Ошибка записи metadata.json: {e}")
 
 def update_metadata(filename: str, url: str, season: str, weekday: str, period: str, year: int):
     metadata = load_metadata()
@@ -152,10 +152,10 @@ def _get_traffic_image():
             
             # Если кэша нет — создаём его и сохраняем на диск
             if not _pixel_cache:
-                logger.info(f"🔄 Предобработка скриншота: {_current_traffic_image_path.name}...")
+                logger.info(f"Предобработка скриншота: {_current_traffic_image_path.name}...")
                 _pixel_cache = build_pixel_cache(_cached_img)
                 save_pixel_cache(_current_traffic_image_path, _pixel_cache)
-                logger.info(f"✅ Кэш создан: {len(_pixel_cache)} цветных пикселей")
+                logger.info(f"Кэш создан: {len(_pixel_cache)} цветных пикселей")
         except Exception as e:
             logger.error(f"Ошибка загрузки изображения: {e}")
             return None
@@ -213,7 +213,7 @@ def get_edge_factor(u_lon, u_lat, v_lon, v_lat, samples=20):
         # Сканируем область вокруг точки (шаг 2 пикселя)
         for dx in range(-SEARCH_RADIUS, SEARCH_RADIUS + 1, 2):
             for dy in range(-SEARCH_RADIUS, SEARCH_RADIUS + 1, 2):
-                # ✅ Берем цвет из кэша, а не из файла!
+                # Берем цвет из кэша
                 color = _get_pixel_color_cached(px + dx, py + dy)
                 
                 if color != "gray":
@@ -234,7 +234,7 @@ def get_edge_factor(u_lon, u_lat, v_lon, v_lat, samples=20):
     return 1.0, "gray"
 
 # ==============================================================================
-# 🗓️ СЕЗОНЫ, ДНИ НЕДЕЛИ, ПЕРИОДЫ
+# СЕЗОНЫ, ДНИ НЕДЕЛИ, ПЕРИОДЫ
 # ==============================================================================
 def get_season(month: int) -> str:
     for season, months in SEASON_MONTHS.items():
@@ -266,7 +266,7 @@ def get_screenshot_for_datetime(dt: datetime.datetime) -> Path:
     """
     weekday = get_weekday_name(dt)
     season = get_season(dt.month)
-    # ✅ Округляем до целого часа (7:32 → 7:00)
+    # Округляем до целого часа
     dt_rounded = dt.replace(minute=0, second=0, microsecond=0)
     return get_screenshot_filename(weekday, dt_rounded.hour, dt_rounded.minute, season)
 
@@ -319,7 +319,7 @@ async def capture_screenshot_for_datetime(date_time: datetime.datetime, output_p
     global _last_capture_time
     if output_path is None: output_path = get_screenshot_for_datetime(date_time)
     if is_screenshot_fresh(output_path):
-        logger.info(f"📦 Используем кэшированный скриншот: {output_path.name}")
+        logger.info(f"Используем кэшированный скриншот: {output_path.name}")
         return output_path
     
     _invalidate_cache()
@@ -342,7 +342,7 @@ async def capture_screenshot_for_datetime(date_time: datetime.datetime, output_p
             await page.wait_for_timeout(1500)
             
             if await page.query_selector('text="Подтвердите, что вы не робот"'):
-                logger.warning("⚠️ CAPTCHA при захвате")
+                logger.warning("CAPTCHA при захвате")
                 return None
             
             await page.screenshot(path=str(output_path), full_page=False)
@@ -353,10 +353,10 @@ async def capture_screenshot_for_datetime(date_time: datetime.datetime, output_p
             period = get_time_period(date_time.hour)
             update_metadata(filename=output_path.name, url=url, season=season, weekday=weekday, period=period, year=date_time.year)
             
-            logger.info(f"✅ Скриншот сохранён: {output_path.name}")
+            logger.info(f"Скриншот сохранён: {output_path.name}")
             return output_path
         except Exception as e:
-            logger.error(f"❌ Ошибка захвата: {e}")
+            logger.error(f"Ошибка захвата: {e}")
             return None
         finally:
             await browser.close()
@@ -364,84 +364,178 @@ async def capture_screenshot_for_datetime(date_time: datetime.datetime, output_p
 import asyncio
 
 async def capture_current_screenshot(output_path: Path = None):
-    """Создаёт скриншот с оптимизациями для Render (в фоне, с таймаутом)"""
+    """
+    Создаёт скриншот Яндекс.Карт с пробками.
+    
+    Особенности:
+    - Кэширование: если скриншот свежий (<15 мин), не создаём новый
+    - Уменьшение масштаба через CDP (вместо Ctrl+-)
+    - Закрытие сайдбара (несколько селекторов + fallback)
+    - Гарантированное закрытие всех ресурсов
+    """
     global _last_capture_time
     
     if output_path is None:
         output_path = IMG_PATH_CURRENT
     
-    # ✅ Проверка кэша
+    # ПРОВЕРКА КЭША: если скриншот свежий (<15 минут), используем его
     if output_path.exists():
         file_age = time.time() - output_path.stat().st_mtime
-        if file_age < 900:  # 15 минут
-            logger.info(f"📦 Кэшированный скриншот (возраст {file_age/60:.1f} мин)")
+        if file_age < 900:  # 900 секунд = 15 минут
+            logger.info(f"Кэшированный скриншот (возраст {file_age/60:.1f} мин)")
             return output_path
     
     _invalidate_cache()
     
-    async def _capture_impl():
-        from playwright.async_api import async_playwright
-        
-        async with async_playwright() as p:
-            # ✅ Оптимизированные флаги для Render
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--use-gl=swiftshader",
-                    "--enable-webgl",
-                    "--ignore-gpu-blacklist",
-                    "--disable-extensions",
-                    "--disable-background-networking",
-                    "--disable-default-apps",
-                    "--disable-sync",
-                    "--disable-translate",
-                    "--no-first-run",
-                    "--mute-audio",
-                ]
-            )
-            
-            try:
-                page = await browser.new_page(
-                    viewport={"width": 1280, "height": 720},
-                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    locale="ru-RU",
-                    timezone_id="Europe/Moscow",
-                )
-                
-                url = f"https://yandex.ru/maps/46/kirov/probki/?l=sat%2Ctrf&ll={MAP_CENTER_LON}%2C{MAP_CENTER_LAT}&z=14"
-                logger.info(f"🌐 Открываю: {url[:80]}...")
-                
-                await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                await page.wait_for_timeout(5000)
-                
-                # Скрываем лишние элементы
-                await page.evaluate("""() => {
-                    document.querySelectorAll('.header__top, .cookie-banner, .copyrights-pane, .logo')
-                        .forEach(el => el.style.display = 'none');
-                }""")
-                
-                await page.screenshot(path=str(output_path), full_page=False)
-                _last_capture_time = time.time()
-                logger.info(f"📸 Скриншот сохранён: {output_path}")
-                return output_path
-                
-            finally:
-                await browser.close()
+    # ЯВНЫЕ переменные для закрытия
+    playwright_instance = None
+    browser = None
+    context = None
+    page = None
     
     try:
-        # ✅ Таймаут 30 секунд
-        return await asyncio.wait_for(_capture_impl(), timeout=30.0)
+        # 1. Запускаем Playwright
+        from playwright.async_api import async_playwright
+        playwright_instance = await async_playwright().start()
+        
+        # 2. Запускаем браузер с оптимизациями для Render
+        browser = await playwright_instance.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--use-gl=swiftshader",
+                "--enable-webgl",
+                "--ignore-gpu-blacklist",
+                "--disable-extensions",
+                "--disable-background-networking",
+                "--disable-default-apps",
+                "--disable-sync",
+                "--disable-translate",
+                "--no-first-run",
+                "--mute-audio",
+            ]
+        )
+        
+        # 3. Создаём контекст с увеличенным viewport
+        context = await browser.new_context(
+            viewport={"width": 1920, "height": 1080},  # Увеличили для большей области
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            locale="ru-RU",
+            timezone_id="Europe/Moscow",
+        )
+        
+        # 4. Создаём страницу
+        page = await context.new_page()
+        
+        url = f"https://yandex.ru/maps/46/kirov/probki/?l=sat%2Ctrf&ll={MAP_CENTER_LON}%2C{MAP_CENTER_LAT}&z=14"
+        logger.info(f"Открываю: {url[:80]}...")
+        
+        await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+        await page.wait_for_timeout(5000)
+        
+        # 5. УМЕНЬШЕНИЕ МАСШТАБА ОКНА через CDP
+        try:
+            client = await context.new_cdp_session(page)
+            await client.send("Emulation.setPageScaleFactor", {
+                "pageScaleFactor": 0.65  # 0.75 = уменьшение на 25%
+            })
+            logger.info("Масштаб окна уменьшен через CDP")
+        except Exception as e:
+            logger.warning(f"Не удалось уменьшить масштаб: {e}")
+        
+        # 6. ЗАКРЫТИЕ САЙДБАРА
+        try:
+            sidebar_selectors = [
+                '.sidebar-toggle-button',
+                '[aria-label*="скрыть" i]',
+                '[aria-label*="закрыть" i]',
+                'button.sidebar-toggle-button',
+            ]
+            
+            closed = False
+            for selector in sidebar_selectors:
+                try:
+                    el = await page.query_selector(selector)
+                    if el and await el.is_visible():
+                        await el.click()
+                        logger.info(f"Сайдбар закрыт через: {selector}")
+                        closed = True
+                        break
+                except Exception:
+                    continue
+            
+            if not closed:
+                # Fallback: скрываем сайдбар через JavaScript
+                await page.evaluate("""() => {
+                    const sidebar = document.querySelector('.map-sidebar, .sidebar, [class*="sidebar"]');
+                    if (sidebar) sidebar.style.display = 'none';
+                }""")
+                logger.info("Сайдбар скрыт через JS")
+                
+        except Exception as e:
+            logger.warning(f"Не удалось закрыть сайдбар: {e}")
+        
+        #СКРЫВАЕМ ЛИШНИЕ ЭЛЕМЕНТЫ
+        await page.evaluate("""() => { 
+            document.querySelectorAll(
+                '.header__top, .cookie-banner, .copyrights-pane, .logo, ' +
+                '.sidebar-toggle-button, .controls__button, .map-credits'
+            ).forEach(el => el.style.display = 'none');
+        }""")
+        
+        await page.wait_for_timeout(1500)
+        
+        # 8. ПРОВЕРКА CAPTCHA
+        if await page.query_selector('text="Подтвердите, что вы не робот"'):
+            logger.warning("CAPTCHA. Пропускаю захват.")
+            return None
+        
+        # 9. ДЕЛАЕМ СКРИНШОТ
+        await page.screenshot(path=str(output_path), full_page=False)
+        _last_capture_time = time.time()
+        logger.info(f"Скриншот сохранён: {output_path}")
+        return output_path
+        
     except asyncio.TimeoutError:
-        logger.warning("⚠️ Скриншот: таймаут 30 секунд")
+        logger.warning("Скриншот: таймаут")
         return None
     except Exception as e:
-        logger.error(f"❌ Ошибка скриншота: {e}", exc_info=False)
+        logger.error(f"Ошибка скриншота: {e}", exc_info=False)
         return None
         
+    finally:
+        # 10. ГАРАНТИРОВАННОЕ закрытие в правильном порядке
+        try:
+            if page and not page.is_closed():
+                await page.close()
+                logger.debug("Page закрыта")
+        except Exception as e:
+            logger.debug(f" Ошибка закрытия page: {e}")
+        
+        try:
+            if context:
+                await context.close()
+                logger.debug("Context закрыт")
+        except Exception as e:
+            logger.debug(f"Ошибка закрытия context: {e}")
+        
+        try:
+            if browser and browser.is_connected():
+                await browser.close()
+                logger.debug("Browser закрыт")
+        except Exception as e:
+            logger.debug(f" Ошибка закрытия browser: {e}")
+        
+        try:
+            if playwright_instance:
+                await playwright_instance.stop()
+                logger.debug("Playwright остановлен")
+        except Exception as e:
+            logger.debug(f" Ошибка остановки playwright: {e}")
+        
 async def update_all_seasonal_screenshots():
-    logger.info("🔄 Начинаю обновление всех сезонных скриншотов...")
+    logger.info("Начинаю обновление всех сезонных скриншотов...")
     now = datetime.datetime.now()
     current_year = now.year
     
@@ -457,38 +551,38 @@ async def update_all_seasonal_screenshots():
                             output_path = get_screenshot_filename(current_year, season, weekday_name, period)
                             
                             if not is_screenshot_fresh(output_path):
-                                logger.info(f"📸 Обновляю: {output_path.name}")
+                                logger.info(f"Обновляю: {output_path.name}")
                                 await capture_screenshot_for_datetime(dt, output_path)
                                 await asyncio.sleep(2)
                             else:
-                                logger.info(f"📦 Актуален: {output_path.name}")
+                                logger.info(f" Актуален: {output_path.name}")
                         break
                 except ValueError:
                     continue
-    logger.info("✅ Все сезонные скриншоты обновлены (112 файлов)")
+    logger.info("Все сезонные скриншоты обновлены (112 файлов)")
 
 async def prebuild_all_caches():
     """Создаёт кэши пикселей для всех существующих скриншотов"""
-    logger.info("💾 Начинаю предобработку кэшей для всех скриншотов...")
+    logger.info("Начинаю предобработку кэшей для всех скриншотов...")
     screenshot_files = list(SCREENSHOTS_DIR.glob("traffic_*.png"))
     total = len(screenshot_files)
-    logger.info(f"📊 Найдено {total} скриншотов для кэширования")
+    logger.info(f"Найдено {total} скриншотов для кэширования")
     
     for i, img_path in enumerate(screenshot_files, 1):
         cache_path = get_cache_path(img_path)
         if cache_path.exists():
-            logger.info(f"[{i}/{total}] 📦 Кэш уже существует: {img_path.name}")
+            logger.info(f"[{i}/{total}] Кэш уже существует: {img_path.name}")
             continue
         
         try:
-            logger.info(f"[{i}/{total}] 🔄 Создаю кэш: {img_path.name}")
+            logger.info(f"[{i}/{total}] Создаю кэш: {img_path.name}")
             img = Image.open(img_path).convert("RGB")
             cache = build_pixel_cache(img)
             save_pixel_cache(img_path, cache)
-            logger.info(f"[{i}/{total}] ✅ Кэш создан: {len(cache)} пикселей")
+            logger.info(f"[{i}/{total}] Кэш создан: {len(cache)} пикселей")
         except Exception as e:
-            logger.error(f"[{i}/{total}] ❌ Ошибка: {e}")
-    logger.info(f"✅ Кэширование завершено: {total} файлов")
+            logger.error(f"[{i}/{total}] Ошибка: {e}")
+    logger.info(f"Кэширование завершено: {total} файлов")
 
 async def precompute_edge_weights(G, blocked_edges_set, use_traffic=True):
     """
@@ -508,10 +602,10 @@ async def precompute_edge_weights(G, blocked_edges_set, use_traffic=True):
             _edge_factor_cache.update(edge_cache)
             return edge_cache
         except Exception as e:
-            logger.warning(f"⚠️ Ошибка загрузки кэша рёбер: {e}")
+            logger.warning(f"Ошибка загрузки кэша рёбер: {e}")
     
     # Вычисляем веса для всех рёбер
-    logger.info(f"🔄 Предобработка весов рёбер для {_current_traffic_image_path.name}...")
+    logger.info(f"Предобработка весов рёбер для {_current_traffic_image_path.name}...")
     edge_cache = {}
     total_edges = len(G.edges)
     
@@ -537,9 +631,9 @@ async def precompute_edge_weights(G, blocked_edges_set, use_traffic=True):
     try:
         with open(cache_path, 'wb') as f:
             pickle.dump(edge_cache, f)
-        logger.info(f"✅ Кэш рёбер сохранён: {cache_path.name} ({len(edge_cache)} рёбер)")
+        logger.info(f"Кэш рёбер сохранён: {cache_path.name} ({len(edge_cache)} рёбер)")
     except Exception as e:
-        logger.error(f"❌ Ошибка сохранения кэша рёбер: {e}")
+        logger.error(f"Ошибка сохранения кэша рёбер: {e}")
     
     _edge_factor_cache.update(edge_cache)
     return edge_cache
@@ -569,12 +663,12 @@ def debug_route_traffic(route_coords, use_traffic=True):
         log_path = Path(__file__).parent.parent / "debug_route_traffic.log"
         with open(log_path, 'w', encoding='utf-8') as f:
             f.write(f"{'='*110}\n")
-            f.write(f"🔍 DEBUG ROUTE TRAFFIC (ПОЛНЫЙ МАРШРУТ) | Всего сегментов: {len(route_coords)-1}\n")
-            f.write(f"📁 Файл скриншота: {_current_traffic_image_path}\n")
+            f.write(f"DEBUG ROUTE TRAFFIC (ПОЛНЫЙ МАРШРУТ) | Всего сегментов: {len(route_coords)-1}\n")
+            f.write(f"Файл скриншота: {_current_traffic_image_path}\n")
             f.write(f"{'№':<5} {'Lon':>10} {'Lat':>10} {'Px':>9} {'RGB':>15} {'Цвет':<10} {'k':>4} {'Влияние':>12}\n")
             f.write(f"{'-'*110}\n")
             if img is None:
-                f.write("⚠️ ОШИБКА: Файл скриншота пробок не найден.\n")
+                f.write("ОШИБКА: Файл скриншота пробок не найден.\n")
                 return
             k_list = []
             for i in range(len(route_coords) - 1):
@@ -592,8 +686,8 @@ def debug_route_traffic(route_coords, use_traffic=True):
             if k_list:
                 avg_k = sum(k_list) / len(k_list)
                 f.write(f"{'-'*110}\n")
-                f.write(f"📊 Средний коэффициент k по ВСЕМ {len(k_list)} сегментам: {avg_k:.2f}\n")
+                f.write(f"Средний коэффициент k по ВСЕМ {len(k_list)} сегментам: {avg_k:.2f}\n")
                 f.write(f"{'='*110}\n")
-        print(f"💾 Отладочный отчёт: backend/debug_route_traffic.log | Средний k: {sum(k_list)/len(k_list):.2f}")
+        print(f"Отладочный отчёт: backend/debug_route_traffic.log | Средний k: {sum(k_list)/len(k_list):.2f}")
     except Exception as e:
-        print(f"⚠️ Ошибка записи отладочного файла: {e}")
+        print(f"Ошибка записи отладочного файла: {e}")
