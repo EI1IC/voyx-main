@@ -30,9 +30,9 @@ FACTOR_MAP = {
 TOLERANCE = 85
 
 # Пути к файлам скриншотов
-IMG_PATH_CURRENT = Path(__file__).parent.parent / "traffic_current.png"
 SCREENSHOTS_DIR = Path(__file__).parent.parent / "screenshots"
 SCREENSHOTS_DIR.mkdir(exist_ok=True)
+IMG_PATH_CURRENT = SCREENSHOTS_DIR / "traffic_current.png"
 
 # Глобальное состояние
 _current_traffic_image_path = IMG_PATH_CURRENT
